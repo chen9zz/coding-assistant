@@ -1,0 +1,131 @@
+:root {
+  color: #1e2822;
+  background: #eef1eb;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  --ink: #172019;
+  --muted: #68746b;
+  --paper: #fafbf8;
+  --line: #dce1da;
+  --forest: #163d2b;
+  --mint: #bde9ce;
+  --lime: #d9f98b;
+  --orange: #ec8c55;
+  --danger: #b84d43;
+  --shadow: 0 18px 50px rgba(24, 44, 31, 0.08);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button { font: inherit; }
+.app-shell { min-height: 100vh; }
+.topbar { height: 88px; padding: 0 3vw; display: flex; align-items: center; justify-content: space-between; background: var(--ink); color: white; }
+.brand-lockup { display: flex; align-items: center; gap: 14px; }
+.brand-mark { width: 42px; height: 42px; display: inline-grid; place-items: center; border-radius: 13px; background: var(--lime); color: var(--forest); font: 700 21px ui-monospace, "SFMono-Regular", Consolas, monospace; transform: rotate(-4deg); }
+.brand-lockup h1 { margin: 1px 0 0; font-size: 20px; letter-spacing: -0.02em; }
+.eyebrow { margin: 0; color: #849087; font: 500 10px ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
+.topbar .eyebrow { color: #9bac9f; }
+.stream-status { display: flex; gap: 8px; align-items: center; color: #bdc9c0; font-size: 12px; }
+.stream-status span { width: 8px; height: 8px; border-radius: 50%; background: #849087; }
+.stream-live span { background: #80dc9f; box-shadow: 0 0 0 5px rgba(128,220,159,.1); }
+.stream-reconnecting span, .stream-connecting span { background: #f1b07a; }
+.dashboard-grid { min-height: calc(100vh - 88px); display: grid; grid-template-columns: 310px minmax(0, 1fr); }
+.run-panel { padding: 30px 22px; display: flex; flex-direction: column; border-right: 1px solid var(--line); background: #f4f6f1; }
+.panel-heading { display: flex; align-items: end; justify-content: space-between; padding: 0 8px 18px; }
+.panel-heading strong { font: 500 18px "DM Mono", monospace; }
+.run-panel nav { display: grid; gap: 9px; }
+.run-card { width: 100%; padding: 15px 13px; display: grid; grid-template-columns: 9px 1fr auto; gap: 11px; align-items: start; text-align: left; border: 1px solid transparent; border-radius: 13px; color: var(--ink); background: transparent; cursor: pointer; }
+.run-card:hover { background: rgba(255,255,255,.7); }
+.run-card.selected { background: white; border-color: #d4dbd2; box-shadow: 0 10px 30px rgba(23,32,25,.06); }
+.run-card b { display: block; margin: -2px 0 5px; font-size: 13px; line-height: 1.35; }
+.run-card small, .run-card time { color: var(--muted); font-size: 10px; }
+.run-card time { font-family: "DM Mono", monospace; }
+.state-dot { width: 8px; height: 8px; margin-top: 4px; border-radius: 50%; background: #9ca79f; }
+.state-dot.state-succeeded { background: #48a96d; }
+.state-dot.state-failed { background: var(--danger); }
+.privacy-note { margin-top: auto; padding: 16px; display: flex; gap: 11px; border: 1px solid #dce6db; border-radius: 13px; background: #edf5ec; color: #506056; }
+.privacy-note span { color: #518261; }
+.privacy-note p { margin: 0; font-size: 10px; line-height: 1.55; }
+.privacy-note b { display: block; color: #2a4f36; font-size: 11px; }
+main { min-width: 0; padding: 34px clamp(24px, 4vw, 62px) 60px; }
+.hero-card { position: relative; padding: 30px 32px 25px; border-radius: 18px; background: var(--forest); color: white; box-shadow: var(--shadow); overflow: hidden; }
+.hero-card::after { content: ""; position: absolute; width: 230px; height: 230px; right: -70px; top: -120px; border: 38px solid rgba(217,249,139,.08); border-radius: 50%; }
+.hero-card h2 { max-width: 720px; margin: 9px 0 7px; font-size: clamp(22px, 3vw, 36px); letter-spacing: -.045em; line-height: 1.12; }
+.repository-path { margin: 0; max-width: 72%; overflow: hidden; color: #aebdb2; font: 400 11px ui-monospace, "SFMono-Regular", Consolas, monospace; white-space: nowrap; text-overflow: ellipsis; }
+.state-badge { position: absolute; z-index: 1; top: 28px; right: 30px; display: flex; gap: 7px; align-items: center; padding: 7px 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; color: #d8f2df; background: rgba(255,255,255,.07); font: 500 10px "DM Mono", monospace; text-transform: uppercase; }
+.state-badge i { width: 6px; height: 6px; border-radius: 50%; background: #75d799; }
+.state-badge.state-failed i { background: #ff9086; }
+.stage-progress { position: relative; z-index: 1; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); list-style: none; }
+.stage-progress li { position: relative; display: grid; gap: 7px; justify-items: center; color: #74917e; }
+.stage-progress li::before { content: ""; position: absolute; height: 1px; width: 100%; top: 11px; left: -50%; background: #315743; }
+.stage-progress li:first-child::before { display: none; }
+.stage-progress li span { z-index: 1; width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid #41634f; border-radius: 50%; background: var(--forest); font: 500 9px "DM Mono", monospace; }
+.stage-progress li.complete { color: #c9e6d1; }
+.stage-progress li.complete::before { background: #6aa67b; }
+.stage-progress li.complete span { border-color: #72b687; background: #346e4a; color: white; }
+.stage-progress small { font: 400 8px "DM Mono", monospace; text-transform: uppercase; }
+.metric-grid { margin-top: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.metric-card { min-width: 0; padding: 18px 19px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
+.metric-card p { margin: 0 0 10px; color: var(--muted); font-size: 10px; }
+.metric-card strong { display: block; font: 600 22px "DM Mono", monospace; color: var(--ink); }
+.metric-card small { display: block; margin-top: 4px; overflow: hidden; color: #8b958e; font-size: 9px; white-space: nowrap; text-overflow: ellipsis; }
+.recovery-banner { margin-top: 16px; padding: 16px 19px; display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; border: 1px solid #cce0ce; border-radius: 14px; background: #e9f5e8; color: #294a32; }
+.recovery-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: white; background: #4c9864; font-weight: 700; }
+.recovery-banner h3, .recovery-banner p { margin: 0; }
+.recovery-banner h3 { font-size: 13px; }
+.recovery-banner p { margin-top: 3px; color: #607264; font-size: 10px; }
+.recovery-banner strong { padding: 5px 8px; border-radius: 6px; background: #d5ebd5; font: 500 10px "DM Mono", monospace; }
+.evidence-grid { margin-top: 16px; display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(270px, .75fr); gap: 14px; align-items: start; }
+.timeline-card, .evidence-card { border: 1px solid var(--line); border-radius: 16px; background: var(--paper); overflow: hidden; }
+.section-heading { padding: 19px 21px 15px; display: flex; justify-content: space-between; align-items: end; border-bottom: 1px solid #e5e9e3; }
+.section-heading h3 { margin: 4px 0 0; font-size: 15px; }
+.section-heading > span { color: var(--muted); font: 400 9px "DM Mono", monospace; }
+.quiet-state { margin: 0; padding: 40px 20px; color: #8a958d; text-align: center; font-size: 11px; }
+.timeline { max-height: 330px; margin: 0; padding: 5px 21px; list-style: none; overflow: auto; }
+.timeline li { display: grid; grid-template-columns: 10px 1fr auto; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid #e9ece7; }
+.timeline li:last-child { border: 0; }
+.timeline-marker { width: 8px; height: 8px; border: 2px solid #d8e9db; border-radius: 50%; background: #5fb67b; }
+.timeline-marker.event-danger { border-color: #f4d4d1; background: var(--danger); }
+.timeline-marker.event-recovery { border-color: #f6ddce; background: var(--orange); }
+.timeline b { display: block; font-size: 11px; font-weight: 600; }
+.timeline small { color: #8a958d; font: 400 8px "DM Mono", monospace; }
+.timeline time { color: #909a93; font: 400 9px "DM Mono", monospace; }
+.evidence-card { padding-bottom: 14px; }
+.evidence-row { margin: 0 19px; padding: 14px 1px; display: flex; justify-content: space-between; border-bottom: 1px solid #e6eae4; font-size: 10px; color: var(--muted); }
+.evidence-row b { display: flex; align-items: center; gap: 6px; color: #356445; font-size: 9px; }
+.evidence-row i { width: 5px; height: 5px; border-radius: 50%; background: #5eb078; }
+.changed-paths { margin: 14px 19px 0; display: grid; gap: 6px; color: var(--muted); font-size: 9px; }
+.changed-paths code { padding: 7px 9px; overflow: hidden; border-radius: 7px; background: #f1f4ef; color: #34483a; font: 500 9px "DM Mono", monospace; text-overflow: ellipsis; }
+.command-block { margin: 16px 19px 2px; padding: 11px 12px; display: flex; gap: 9px; border-radius: 9px; background: #18221b; color: #b9c8bc; overflow: hidden; }
+.command-block span { color: var(--lime); }
+.command-block code { overflow: hidden; font: 400 9px "DM Mono", monospace; white-space: nowrap; text-overflow: ellipsis; }
+.centered-state { min-height: 100vh; display: grid; place-content: center; justify-items: center; text-align: center; background: #eef1eb; }
+.centered-state h1 { margin: 25px 0 7px; font-size: 24px; }
+.centered-state p { max-width: 440px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.centered-state.error h1 { color: var(--danger); }
+
+@media (max-width: 980px) {
+  .dashboard-grid { grid-template-columns: 240px minmax(0, 1fr); }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .evidence-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .topbar { height: 76px; padding: 0 18px; }
+  .stream-status { font-size: 0; }
+  .dashboard-grid { display: block; }
+  .run-panel { padding: 15px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .run-panel nav { display: flex; overflow-x: auto; }
+  .run-card { min-width: 250px; }
+  .privacy-note, .panel-heading { display: none; }
+  main { padding: 18px 15px 40px; }
+  .hero-card { padding: 24px 19px 20px; }
+  .hero-card > div > .eyebrow { margin-top: 38px; }
+  .hero-card h2 { padding-right: 0; margin-top: 10px; }
+  .repository-path { max-width: 100%; }
+  .state-badge { top: 22px; left: 19px; right: auto; }
+  .stage-progress small { display: none; }
+  .metric-grid { grid-template-columns: 1fr 1fr; }
+  .recovery-banner { grid-template-columns: auto 1fr; }
+  .recovery-banner strong { display: none; }
+}

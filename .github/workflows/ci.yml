@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Python ${{ matrix.python-version }} / Node 24
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install offline-core test dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Install locked dashboard dependencies
+        run: npm --prefix web ci
+
+      - name: Run the complete verifier
+        env:
+          REPOPILOT_VERIFY_DIR: ${{ runner.temp }}/repopilot-${{ matrix.python-version }}
+        run: sh scripts/verify.sh
+
+      - name: Upload deterministic evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-python-${{ matrix.python-version }}
+          path: ${{ runner.temp }}/repopilot-${{ matrix.python-version }}/evaluation/evaluation-results
+          if-no-files-found: error

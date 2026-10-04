@@ -1,0 +1,7 @@
+{
+  "case_id": "divide_zero",
+  "issue": "Make safe_divide return None instead of raising when the denominator is zero.",
+  "expected_changed_paths": ["calculator.py"],
+  "inject_crash": false
+}
+

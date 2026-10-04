@@ -1,0 +1,14 @@
+[
+  {
+    "kind": "TOOL",
+    "operation_id": "config-patch",
+    "tool_name": "apply_patch",
+    "arguments": {
+      "patch": "diff --git a/config.py b/config.py\n--- a/config.py\n+++ b/config.py\n@@ -1,3 +1,7 @@\n-def parse_port(value: str) -> int:\n-    return int(value)\n-\n+def parse_port(value: str | None, default: int = 8080) -> int:\n+    if value is None or not value.strip():\n+        return default\n+    port = int(value)\n+    if not 1 <= port <= 65535:\n+        raise ValueError(\"port must be between 1 and 65535\")\n+    return port\n"
+    }
+  },
+  {
+    "kind": "FINAL",
+    "final_text": "Added a safe default and validated the complete TCP port range."
+  }
+]

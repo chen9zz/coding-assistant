@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "verified_on": "2026-08-24",
+  "runtime": "scripted-offline",
+  "python": "3.13.13",
+  "platform": "macOS-arm64",
+  "total": 3,
+  "resolved": 3,
+  "resolved_rate": 1.0,
+  "policy_violations": 0,
+  "recovery_attempts": 1,
+  "backend_tests_passed": 133,
+  "branch_coverage_percent": 85.83,
+  "frontend_tests_passed": 2,
+  "report_sha256": "d03e61ac52ebf601a28c058dffae12727bf9fe62d9769764cfbe03aa9e5aa50b",
+  "cases": [
+    {
+      "case_id": "config_validation",
+      "resolved": true,
+      "tests_passed": true,
+      "scope_ok": true,
+      "recovery_attempts": 1,
+      "policy_violations": 0
+    },
+    {
+      "case_id": "divide_zero",
+      "resolved": true,
+      "tests_passed": true,
+      "scope_ok": true,
+      "recovery_attempts": 0,
+      "policy_violations": 0
+    },
+    {
+      "case_id": "slug_normalization",
+      "resolved": true,
+      "tests_passed": true,
+      "scope_ok": true,
+      "recovery_attempts": 0,
+      "policy_violations": 0
+    }
+  ]
+}

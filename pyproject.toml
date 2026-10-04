@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "repopilot-r"
+version = "0.1.0"
+description = "A reliable issue-to-verified-patch software engineering agent"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Chen Wu" }]
+dependencies = [
+  "cryptography>=45,<51",
+  "fastapi>=0.116,<1",
+  "pydantic>=2.11,<3",
+  "tree-sitter>=0.24,<1",
+  "tree-sitter-python>=0.23,<1",
+  "typer>=0.16,<1",
+  "uvicorn>=0.35,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx2>=2.12,<3",
+  "mypy>=1.17,<2",
+  "pytest>=8.4,<9",
+  "pytest-cov>=6.2,<7",
+  "ruff>=0.12,<1",
+]
+online = ["openai-agents>=0.22,<1"]
+mcp = ["mcp>=2,<3"]
+otel = [
+  "opentelemetry-api>=1.44,<2",
+  "opentelemetry-sdk>=1.44,<2",
+]
+
+[project.scripts]
+repopilot = "repopilot.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/repopilot"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["repopilot"]
+
+[tool.coverage.run]
+branch = true
+source = ["repopilot"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = true

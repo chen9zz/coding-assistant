@@ -1,0 +1,7 @@
+{
+  "case_id": "config_validation",
+  "issue": "Use port 8080 for missing values and reject ports outside the TCP range.",
+  "expected_changed_paths": ["config.py"],
+  "inject_crash": true
+}
+

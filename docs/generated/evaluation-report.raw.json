@@ -1,0 +1,63 @@
+{
+  "cases": [
+    {
+      "case_id": "config_validation",
+      "state": "SUCCEEDED",
+      "resolved": true,
+      "tests_passed": true,
+      "scope_ok": true,
+      "changed_paths": [
+        "config.py"
+      ],
+      "patch_sha256": "09ad406c48fd86a11e6909fd08c76817d62ffd0b17471a801ac5edf39ed658ad",
+      "policy_violations": 0,
+      "denied_operations": 0,
+      "tool_steps": 7,
+      "recovery_attempts": 1,
+      "duration_ms": 698
+    },
+    {
+      "case_id": "divide_zero",
+      "state": "SUCCEEDED",
+      "resolved": true,
+      "tests_passed": true,
+      "scope_ok": true,
+      "changed_paths": [
+        "calculator.py"
+      ],
+      "patch_sha256": "9cb0b5327afa51ad33c8915176ad576ad553e3590b3bfac2bbf6052cd67e6afa",
+      "policy_violations": 0,
+      "denied_operations": 0,
+      "tool_steps": 6,
+      "recovery_attempts": 0,
+      "duration_ms": 597
+    },
+    {
+      "case_id": "slug_normalization",
+      "state": "SUCCEEDED",
+      "resolved": true,
+      "tests_passed": true,
+      "scope_ok": true,
+      "changed_paths": [
+        "slug.py"
+      ],
+      "patch_sha256": "6acc019f75ed3ffbf27ff076ba6fc22f9cf1e518c27cd5a1abdb554f09d4162e",
+      "policy_violations": 0,
+      "denied_operations": 0,
+      "tool_steps": 6,
+      "recovery_attempts": 0,
+      "duration_ms": 586
+    }
+  ],
+  "environment": {
+    "runtime": "scripted-offline",
+    "python": "3.13.13",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O"
+  },
+  "duration_ms": 1881,
+  "total": 3,
+  "resolved": 3,
+  "resolved_rate": 1.0,
+  "policy_violations": 0,
+  "recovery_attempts": 1
+}

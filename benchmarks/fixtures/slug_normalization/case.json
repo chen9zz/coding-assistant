@@ -1,0 +1,7 @@
+{
+  "case_id": "slug_normalization",
+  "issue": "Normalize repeated whitespace and punctuation into one hyphen when generating a slug.",
+  "expected_changed_paths": ["slug.py"],
+  "inject_crash": false
+}
+
