@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Final delivery root is `/Users/chen/Agent study/project`.
+- Final delivery root is `<PROJECT_ROOT>`.
 - The source checkout must never be edited; every task mutation occurs in a dedicated Git worktree.
 - Offline demo and required tests must need no API key, Docker, network service, or model credits.
 - Commands run as argument arrays with `shell=False`, a fixed working directory, an environment allowlist, timeout, and output budget.
@@ -838,7 +838,7 @@ git commit -m "docs: explain and position RepoPilot-R"
 - Create: `docs/VERIFICATION_REPORT.md`
 
 **Interfaces:**
-- Produces: final evidence table, clean Git state, verified copy under `/Users/chen/Agent study/project`.
+- Produces: final evidence table, clean Git state, verified copy under `<PROJECT_ROOT>`.
 
 - [ ] **Step 1: Run requirement-to-evidence audit**
 
@@ -864,7 +864,7 @@ Expected: final status is empty.
 
 - [ ] **Step 5: Copy the complete repository and re-run target-path smoke checks**
 
-Copy the committed project, including `.git`, into the already empty `/Users/chen/Agent study/project`. From that exact target, run the offline demo, documentation contract, Git status, and file-tree checks. Compare source and target commit IDs.
+Copy the committed project, including `.git`, into the already empty `<PROJECT_ROOT>`. From that exact target, run the offline demo, documentation contract, Git status, and file-tree checks. Compare source and target commit IDs.
 
 - [ ] **Step 6: Commit any target-path-only correction before delivery**
 

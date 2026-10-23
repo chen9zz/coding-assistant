@@ -3,8 +3,8 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "repopilot-r"
-version = "0.1.0"
+name = "forgepilot"
+version = "0.3.0"
 description = "A reliable issue-to-verified-patch software engineering agent"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,7 +14,9 @@ dependencies = [
   "cryptography>=45,<51",
   "fastapi>=0.116,<1",
   "pydantic>=2.11,<3",
-  "tree-sitter>=0.24,<1",
+  "PyYAML>=6.0.2,<7",
+  # 0.26.0 reproduces native heap corruption on large walks on macOS/Python 3.13.
+  "tree-sitter>=0.25.2,<0.26",
   "tree-sitter-python>=0.23,<1",
   "typer>=0.16,<1",
   "uvicorn>=0.35,<1",
@@ -22,20 +24,28 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "textual>=8.2,<9",
+  "SQLAlchemy>=2.0,<3",
+  "PyMySQL[rsa]>=1.2,<2",
+  "mcp>=2,<3",
   "httpx2>=2.12,<3",
   "mypy>=1.17,<2",
   "pytest>=8.4,<9",
   "pytest-cov>=6.2,<7",
   "ruff>=0.12,<1",
+  "types-PyYAML>=6,<7",
 ]
 online = ["openai-agents>=0.22,<1"]
 mcp = ["mcp>=2,<3"]
+mysql = ["SQLAlchemy>=2.0,<3", "PyMySQL[rsa]>=1.2,<2"]
+tui = ["textual>=8.2,<9", "httpx2>=2.12,<3"]
 otel = [
   "opentelemetry-api>=1.44,<2",
   "opentelemetry-sdk>=1.44,<2",
 ]
 
 [project.scripts]
+forgepilot = "repopilot.cli:app"
 repopilot = "repopilot.cli:app"
 
 [tool.hatch.build.targets.wheel]
@@ -59,7 +69,7 @@ packages = ["repopilot"]
 
 [tool.coverage.run]
 branch = true
-source = ["repopilot"]
+source = ["src/repopilot"]
 
 [tool.coverage.report]
 fail_under = 85

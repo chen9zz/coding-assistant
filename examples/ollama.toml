@@ -1,0 +1,9 @@
+[provider]
+protocol = "openai"
+base_url = "http://127.0.0.1:11434/v1"
+model = "REPLACE_WITH_YOUR_INSTALLED_TOOL_CAPABLE_MODEL"
+timeout_seconds = 120
+# Local Ollama does not require an API key. No model is downloaded automatically.
+
+[skills]
+roots = []

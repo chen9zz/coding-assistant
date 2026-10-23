@@ -68,7 +68,7 @@ def write_report(report: EvaluationReport, output_directory: Path) -> tuple[Path
     markdown_path = output_directory / "report.md"
     json_path.write_text(report.model_dump_json(indent=2) + "\n")
     rows = [
-        "# RepoPilot-R Offline Evaluation",
+        "# ForgePilot Offline Evaluation",
         "",
         f"- Runtime: `{report.environment.runtime}`",
         f"- Python: `{report.environment.python}`",

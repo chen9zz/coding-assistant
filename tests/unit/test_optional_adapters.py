@@ -120,7 +120,7 @@ def test_missing_online_extra_has_actionable_install_command() -> None:
 
     runtime = OpenAIAgentsRuntime(importer=missing)
 
-    with pytest.raises(OptionalDependencyError, match=r"repopilot-r\[online\]"):
+    with pytest.raises(OptionalDependencyError, match=r"\.\[online\]"):
         runtime.next_action(AgentContext.empty("fix bug"))
 
 

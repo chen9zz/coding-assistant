@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +13,13 @@ from uuid import uuid4
 from pydantic import TypeAdapter
 
 from repopilot.agent.actions import AgentContext, ToolExchange
-from repopilot.agent.loop import MinimalAgentLoop, Runtime, TimeBudgetExceeded, ToolGateway
+from repopilot.agent.loop import (
+    AgentCancelled,
+    MinimalAgentLoop,
+    Runtime,
+    TimeBudgetExceeded,
+    ToolGateway,
+)
 from repopilot.domain.models import (
     AgentPlan,
     JsonValue,
@@ -68,9 +75,7 @@ class FaultingGateway:
         *,
         timeout_seconds: float | None = None,
     ) -> ToolResult:
-        result = self.delegate.execute(
-            task_id, worktree, request, timeout_seconds=timeout_seconds
-        )
+        result = self.delegate.execute(task_id, worktree, request, timeout_seconds=timeout_seconds)
         self.fault.after_operation(request.operation_id)
         return result
 
@@ -88,12 +93,14 @@ class DurableTaskOrchestrator:
         mapper: RepositoryMapper,
         gateway_factory: GatewayFactory,
         redactor: ContentRedactor,
+        cancelled: Callable[[], bool] | None = None,
     ) -> None:
         self.store = store
         self.worktrees = worktrees
         self.mapper = mapper
         self.gateway_factory = gateway_factory
         self.redactor = redactor
+        self.cancelled = cancelled
 
     def run(
         self,
@@ -116,6 +123,9 @@ class DurableTaskOrchestrator:
             if snapshot.state is TaskState.REVIEWING:
                 snapshot = self._review(snapshot)
             return snapshot
+        except AgentCancelled:
+            current = self.store.get_task(task_id)
+            return self._transition(current, TaskState.CANCELLED, "task.cancelled", {})
         except InjectedCrash:
             raise
         except (IdempotencyConflict, OperationInProgress):
@@ -212,7 +222,9 @@ class DurableTaskOrchestrator:
             raise RuntimeError("persisted tool history exhausted the task step budget")
         answer = MinimalAgentLoop(
             max_steps=remaining_steps,
+            max_context_chars=snapshot.spec.max_context_chars,
             max_elapsed_seconds=self._remaining_seconds(snapshot),
+            verification_command=snapshot.spec.test_command,
         ).run(
             snapshot.task_id,
             runtime,
@@ -220,8 +232,19 @@ class DurableTaskOrchestrator:
             snapshot.worktree,
             AgentContext.empty(
                 issue=snapshot.spec.issue,
-                constraints=snapshot.spec.constraints,
+                constraints=(
+                    *snapshot.spec.constraints,
+                    "Host execution contract: "
+                    + json.dumps(
+                        {
+                            "test_command": snapshot.spec.test_command,
+                            "allowed_paths": snapshot.spec.allowed_paths,
+                            "max_changed_files": snapshot.spec.max_changed_files,
+                        }
+                    ),
+                ),
             ).model_copy(update={"exchanges": history}),
+            cancelled=self.cancelled,
         )
         approval = next(
             (
@@ -334,9 +357,7 @@ class DurableTaskOrchestrator:
             )
         assert isinstance(output, dict)
         raw_paths = output.get("changed_paths")
-        if not isinstance(raw_paths, list) or not all(
-            isinstance(path, str) for path in raw_paths
-        ):
+        if not isinstance(raw_paths, list) or not all(isinstance(path, str) for path in raw_paths):
             return self._transition(
                 current,
                 TaskState.FAILED,
@@ -385,8 +406,9 @@ class DurableTaskOrchestrator:
         )
         return self.store.append(event, expected_sequence=snapshot.sequence)
 
-    @staticmethod
-    def _remaining_seconds(snapshot: TaskSnapshot) -> float:
+    def _remaining_seconds(self, snapshot: TaskSnapshot) -> float:
+        if self.cancelled and self.cancelled():
+            raise AgentCancelled("task cancelled at a safe execution boundary")
         elapsed = (utc_now() - snapshot.created_at).total_seconds()
         remaining = snapshot.spec.timeout_seconds - elapsed
         if remaining <= 0:

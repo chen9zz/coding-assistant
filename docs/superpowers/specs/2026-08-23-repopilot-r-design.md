@@ -3,7 +3,7 @@
 - **Status:** Approved
 - **Date:** 2026-08-23 (NZST)
 - **Approval basis:** The user approved the recommended route and delegated the remaining design decisions to the recommended defaults without further confirmation.
-- **Final delivery root:** `/Users/chen/Agent study/project`
+- **Final delivery root:** `<PROJECT_ROOT>`
 
 ## 1. Product definition
 
@@ -389,7 +389,7 @@ The final documentation must be useful to three audiences:
 
 The implementation is complete only when all of the following are true:
 
-1. Source and requested Markdown deliverables exist under `/Users/chen/Agent study/project`.
+1. Source and requested Markdown deliverables exist under `<PROJECT_ROOT>`.
 2. The documented offline quickstart is executed successfully from a clean environment or fresh virtual environment.
 3. Backend tests/checks, frontend tests/build, end-to-end demo, recovery test, and fixture evaluation have current passing evidence.
 4. Generated metrics are copied into documentation without embellishment.

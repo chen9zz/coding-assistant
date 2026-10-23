@@ -10,10 +10,11 @@ from pathlib import Path
 from repopilot.application.orchestrator import DurableTaskOrchestrator
 from repopilot.application.service import TaskApplicationService
 from repopilot.domain.models import TaskSpec
+from repopilot.domain.ports import EventStore
 from repopilot.infrastructure.artifacts import ArtifactBundleWriter
 from repopilot.infrastructure.git import GitWorktreeManager
 from repopilot.infrastructure.sqlite import SQLiteEventStore
-from repopilot.tools.builtin import build_builtin_registry
+from repopilot.tools.builtin import ToolRegistry, build_builtin_registry
 from repopilot.tools.gateway import SafeToolGateway
 from repopilot.tools.policy import PolicyEngine
 from repopilot.tools.redaction import Redactor
@@ -23,31 +24,41 @@ from repopilot.tools.repository import RepositoryMapper
 @dataclass(frozen=True, slots=True)
 class LocalContainer:
     root: Path
-    store: SQLiteEventStore
+    store: EventStore
     service: TaskApplicationService
 
 
 def build_local_container(
     root: Path,
     task_id_factory: Callable[[], str] | None = None,
+    *,
+    registry: ToolRegistry | None = None,
+    allowed_mcp_tools: tuple[str, ...] = (),
+    allowed_delegation_tools: tuple[str, ...] = (),
+    secret_values: set[str] | None = None,
+    store: EventStore | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> LocalContainer:
     resolved_root = root.resolve(strict=False)
     resolved_root.mkdir(parents=True, exist_ok=True)
-    store = SQLiteEventStore(resolved_root / "state.db")
+    store = store if store is not None else SQLiteEventStore(resolved_root / "state.db")
     secrets = {
         value
         for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_TOKEN")
         if (value := os.environ.get(name))
     }
+    secrets.update(secret_values or set())
     redactor = Redactor(secrets=secrets)
 
     def gateway_factory(worktree: Path, spec: TaskSpec) -> SafeToolGateway:
         return SafeToolGateway(
             store=store,
-            registry=build_builtin_registry(),
+            registry=registry or build_builtin_registry(),
             policy=PolicyEngine(
                 worktree,
                 allowed_commands={spec.test_command},
+                allowed_mcp_tools=allowed_mcp_tools,
+                allowed_delegation_tools=allowed_delegation_tools,
                 allowed_paths=spec.allowed_paths,
                 max_changed_files=spec.max_changed_files,
             ),
@@ -60,6 +71,7 @@ def build_local_container(
         mapper=RepositoryMapper(),
         gateway_factory=gateway_factory,
         redactor=redactor,
+        cancelled=cancelled,
     )
     artifact_writer = ArtifactBundleWriter(resolved_root / "artifacts", store, redactor)
     service = TaskApplicationService(

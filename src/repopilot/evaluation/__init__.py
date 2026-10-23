@@ -1,4 +1,4 @@
-"""Reproducible offline evaluation for RepoPilot-R workflows."""
+"""Reproducible offline evaluation for ForgePilot workflows."""
 
 from repopilot.evaluation.cases import FixtureCase, load_builtin_cases
 from repopilot.evaluation.graders import EvaluationReport

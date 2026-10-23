@@ -1,0 +1,24 @@
+# API key stays in the environment; this file is safe to version-control.
+[provider]
+protocol = "openai"
+base_url = "https://api.deepseek.com"
+model = "deepseek-flash"
+api_key_env = "DEEPSEEK_API_KEY"
+timeout_seconds = 90
+
+# Reasoning-content replay is not implemented. Use non-thinking tool calling.
+[provider.request_options]
+thinking = { type = "disabled" }
+max_tokens = 8192
+
+[skills]
+roots = [] # Example: ["/absolute/path/to/your/skills"]
+
+# Explicitly trust an installed server before uncommenting. No automatic downloads.
+# [[mcp_servers]]
+# name = "docs"
+# transport = "stdio"
+# command = "/absolute/path/to/python"
+# args = ["/absolute/path/to/trusted_server.py"]
+# allow_tools = ["search_docs"]
+# env = { DOCS_TOKEN = "MY_DOCS_TOKEN" }

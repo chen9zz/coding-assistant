@@ -1,4 +1,34 @@
-# RepoPilot-R 项目简介与简历材料
+# ForgePilot 项目简介与简历材料
+
+## 0.3 当前定位
+
+ForgePilot（原 RepoPilot-R）是有界、可审计的本地编程 Agent。新增 Textual TUI、React 操作工作台、独立后台 worker、只读分析子代理，以及可选 MySQL 事件存储。界面共用同一控制 API；模型凭据只从服务环境读取。子代理具备独立上下文和预算，但不拥有修改、命令、MCP 或递归派生能力。
+
+当前可用简历版本：
+
+**ForgePilot｜可审计的多模型编程 Agent｜个人项目**
+
+Python · FastAPI · Textual · React/TypeScript · SQLAlchemy/MySQL · SQLite · MCP · Agent Skills
+
+- 实现统一控制面与持久化后台任务：TUI/网页共享提交、精确审批、协作取消和恢复入口，通过进程代次校验避免旧 worker 覆盖新任务状态。
+- 构建原生多模型工具调用、MCP 持久连接和 Skills 按需读取，支持独立上下文的只读后台子代理；以策略网关、子任务归属校验及预算限制控制工具权限。
+- 为 SQLite/MySQL 实现统一事件存储契约、事务操作声明和加密审批；以隔离 worktree、宿主测试复跑和补丁证据判定任务成功，配套自动化测试与真实仓库验收准备工具。
+
+**ForgePilot | Auditable multi-model coding agent | Personal project**
+
+- Built shared terminal/web task controls with persistent background workers, exact-operation approvals, cooperative cancellation and generation-safe recovery.
+- Integrated native model tool calling, persistent MCP connections, on-demand Skills, and bounded read-only analysis subagents with independent contexts.
+- Implemented SQLite/MySQL event-store adapters with transactional operation claims and encrypted approvals; enforced host-side verification and patch evidence in isolated Git worktrees.
+
+已完成真实 DeepSeek + 本机 MySQL 仓库任务：经八轮调试与检查点续修，32 项独立验收和 236 项候选仓库测试通过。2026-10-23 宿主全量回归为 339 passed、1 项 SQLite 专属 skip，综合覆盖率（含分支）87.97%，前端 11 项测试通过。发布前追加回归见 README 最新结果。
+
+不要将离线 fixture、本地 HTTP 模拟回复或数据库契约测试写成真实模型成功率、SWE-bench 成绩、MySQL 生产验收或 OS 沙箱。最新真实任务证据见 [LIVE_E2E_VERIFICATION.md](LIVE_E2E_VERIFICATION.md)。下文全部作为 0.1/0.2 设计与指标的历史参考，不是当前简历推荐稿。
+
+## 0.2 新增能力（2026-10-22）
+
+新增真实 OpenAI-compatible / Anthropic API 通信、MCP stdio / Streamable HTTP 持久连接，以及 Agent Skills 按需加载。现在 CLI 可直接由模型驱动工具调用循环、审批恢复与测试验收，不再仅靠预写 actions。配置与边界见[连接式助手](CONNECTED_ASSISTANT.md)，本次验证见[0.2 验证报告](CONNECTED_VERIFICATION.md)。下文 133 项测试、85.83% 和 3/3 保留为 0.1 历史指标，不代表当前版本测试数量或模型自主修复率。
+
+可以新增到简历的工程事实：实现双协议原生工具调用、动态工具 Schema、MCP 持久会话与精确白名单、Skills 元数据发现和分页加载；以真实本地 HTTP/MCP 服务覆盖完整编程、审批恢复和测试验收链路。本次 224 项 Python 测试通过，语句与分支合计覆盖率 86.76%。
 
 ## 一句话介绍
 

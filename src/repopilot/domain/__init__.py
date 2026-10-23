@@ -1,4 +1,4 @@
-"""Stable domain contracts shared by every RepoPilot-R adapter."""
+"""Stable domain contracts shared by every ForgePilot adapter."""
 
 from repopilot.domain.models import (
     AgentPlan,

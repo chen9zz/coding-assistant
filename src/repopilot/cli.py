@@ -8,24 +8,79 @@ import platform
 import shlex
 import shutil
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
 import typer
 import uvicorn
 
+from repopilot.agent.loop import Runtime
 from repopilot.agent.scripted import ScriptedRuntime
 from repopilot.api import create_app
-from repopilot.bootstrap import build_local_container
-from repopilot.domain.models import TaskSpec
+from repopilot.bootstrap import LocalContainer, build_local_container
+from repopilot.domain.models import TaskSpec, TaskState
 from repopilot.evaluation.cases import load_action_json, load_builtin_cases
 from repopilot.evaluation.runner import EvaluationRunner
 
 app = typer.Typer(
-    name="repopilot",
+    name="forgepilot",
     help="Reliable issue-to-verified-patch software engineering agent.",
     no_args_is_help=True,
 )
+
+
+@app.command("ui")
+def ui_command(
+    demo: Annotated[
+        bool, typer.Option("--demo", help="Offline scripted demo, no model calls.")
+    ] = False,
+    repository: Annotated[Path | None, typer.Option("--repo", exists=True, file_okay=False)] = None,
+    config: Annotated[Path | None, typer.Option("--config", exists=True, dir_okay=False)] = None,
+    workspace: Annotated[Path, typer.Option("--workspace")] = Path(".forgepilot/server"),
+    test_command: Annotated[str, typer.Option("--test-command")] = "python -m pytest -q",
+    port: Annotated[int, typer.Option("--port", min=1, max=65535)] = 8765,
+) -> None:
+    """Open the loopback-only task workbench (web + shared TUI backend)."""
+    from repopilot.api.control import create_control_app
+    from repopilot.application.jobs import JobManager
+
+    if demo and (repository or config):
+        raise typer.BadParameter("--demo cannot be combined with --repo or --config")
+    try:
+        manager = JobManager(
+            workspace,
+            repository=repository,
+            config=config,
+            test_command=tuple(shlex.split(test_command)),
+            demo=demo,
+        )
+        control = create_control_app(manager)
+    except (ValueError, OSError, RuntimeError) as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(f"ForgePilot {'OFFLINE DEMO' if demo else 'ONLINE'}: http://127.0.0.1:{port}")
+    typer.echo("Keep this service running for UI access; existing workers survive UI disconnects.")
+    uvicorn.run(control, host="127.0.0.1", port=port)
+
+
+@app.command("tui")
+def tui_command(
+    url: Annotated[str, typer.Option("--url")] = "http://127.0.0.1:8765",
+) -> None:
+    """Connect the interactive terminal to a running ForgePilot ui service."""
+    from urllib.parse import urlsplit
+
+    target = urlsplit(url)
+    if target.scheme != "http" or target.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        raise typer.BadParameter("TUI must connect to a local loopback HTTP service")
+    try:
+        from repopilot.tui import ForgePilotApp
+    except ImportError:
+        raise typer.BadParameter(
+            "install ForgePilot's tui extra first: pip install -e '.[tui]'"
+        ) from None
+    ForgePilotApp(base_url=url).run()
 
 
 @app.command()
@@ -52,7 +107,12 @@ def doctor(
         "openai_agents": {
             "ok": importlib.util.find_spec("agents") is not None,
             "required": False,
-            "detail": "install the online extra for real-model runs",
+            "detail": "legacy SDK adapter; native HTTP providers do not require this extra",
+        },
+        "mcp": {
+            "ok": importlib.util.find_spec("mcp") is not None,
+            "required": False,
+            "detail": "install the mcp extra to connect MCP servers",
         },
     }
     if json_output:
@@ -119,7 +179,8 @@ def evaluation_command(
 def run_command(
     repository: Annotated[Path, typer.Option("--repo", exists=True, file_okay=False)],
     issue: Annotated[str, typer.Option("--issue")],
-    actions: Annotated[Path, typer.Option("--actions", exists=True, dir_okay=False)],
+    actions: Annotated[Path | None, typer.Option("--actions", exists=True, dir_okay=False)] = None,
+    config: Annotated[Path | None, typer.Option("--config", exists=True, dir_okay=False)] = None,
     workspace: Annotated[Path, typer.Option("--workspace")] = Path(".repopilot/task"),
     test_command: Annotated[str, typer.Option("--test-command")] = "python -m pytest -q",
     allowed_path: Annotated[
@@ -130,41 +191,101 @@ def run_command(
         int | None,
         typer.Option("--max-changed-files", min=1, max=1000),
     ] = None,
-    timeout_seconds: Annotated[
-        int, typer.Option("--timeout-seconds", min=1, max=3600)
-    ] = 300,
+    timeout_seconds: Annotated[int, typer.Option("--timeout-seconds", min=1, max=3600)] = 300,
+    max_steps: Annotated[int, typer.Option("--max-steps", min=1, max=100)] = 24,
+    context_chars: Annotated[
+        int, typer.Option("--context-chars", min=24_000, max=1_000_000)
+    ] = 128_000,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """Run a structured offline action file against an isolated repository."""
+    """Run an online coding task (--config) or offline fixture (--actions) in a worktree."""
     argv = tuple(shlex.split(test_command))
     if not argv:
         raise typer.BadParameter("test command cannot be empty")
-    container = build_local_container(workspace)
-    snapshot = container.service.create(
-        TaskSpec(
-            repository=repository.resolve(),
-            issue=issue,
-            test_command=argv,
-            allowed_paths=tuple(allowed_path or ()),
-            max_changed_files=max_changed_files,
-            timeout_seconds=timeout_seconds,
-        )
+    spec = TaskSpec(
+        repository=repository.resolve(),
+        issue=issue,
+        test_command=argv,
+        allowed_paths=tuple(allowed_path or ()),
+        max_changed_files=max_changed_files,
+        timeout_seconds=timeout_seconds,
+        max_steps=max_steps,
+        max_context_chars=context_chars,
     )
-    result = container.service.run(snapshot.task_id, ScriptedRuntime(load_action_json(actions)))
+    with _runtime_session(workspace, actions, config) as (container, runtime):
+        snapshot = container.service.create(spec)
+        result = container.service.run(snapshot.task_id, runtime)
+        if result.state is TaskState.SUCCEEDED:
+            container.service.artifacts(result.task_id)
     _emit(result.model_dump(mode="json"), json_output)
+    if result.state is TaskState.FAILED:
+        raise typer.Exit(1)
 
 
 @app.command()
 def resume(
     task_id: Annotated[str, typer.Argument()],
-    actions: Annotated[Path, typer.Option("--actions", exists=True, dir_okay=False)],
+    actions: Annotated[Path | None, typer.Option("--actions", exists=True, dir_okay=False)] = None,
+    config: Annotated[Path | None, typer.Option("--config", exists=True, dir_okay=False)] = None,
     workspace: Annotated[Path, typer.Option("--workspace")] = Path(".repopilot/task"),
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Resume a non-terminal task from SQLite checkpoints."""
-    container = build_local_container(workspace)
-    result = container.service.resume(task_id, ScriptedRuntime(load_action_json(actions)))
+    with _runtime_session(workspace, actions, config) as (container, runtime):
+        result = container.service.resume(task_id, runtime)
+        if result.state is TaskState.SUCCEEDED:
+            container.service.artifacts(result.task_id)
     _emit(result.model_dump(mode="json"), json_output)
+    if result.state is TaskState.FAILED:
+        raise typer.Exit(1)
+
+
+@app.command("check-config")
+def check_config(
+    config: Annotated[Path, typer.Option("--config", exists=True, dir_okay=False)],
+    workspace: Annotated[Path, typer.Option("--workspace")] = Path(".repopilot/check"),
+) -> None:
+    """Connect trusted MCP servers and list tools; no model request or tool invocation."""
+    from repopilot.configuration import load_config
+    from repopilot.connected import connected_session
+    from repopilot.tools.skills import SkillCatalog
+
+    try:
+        settings = load_config(config)
+        with connected_session(workspace, config) as (_, runtime):
+            # Discovery is done during session construction; no model credits are used.
+            _emit(
+                {
+                    "protocol": settings.provider.protocol,
+                    "model": settings.provider.model,
+                    "mcp_servers": [s.name for s in settings.mcp_servers],
+                    "tools": [tool["name"] for tool in runtime.tools],
+                    "skills": SkillCatalog(settings.skills.roots).metadata(),
+                    "status": "configuration-and-mcp-ready; model-not-contacted",
+                },
+                True,
+            )
+    except (ValueError, OSError, RuntimeError) as error:
+        raise typer.BadParameter(str(error)) from None
+
+
+@contextmanager
+def _runtime_session(
+    workspace: Path, actions: Path | None, config: Path | None
+) -> Iterator[tuple[LocalContainer, Runtime]]:
+    if (actions is None) == (config is None):
+        raise typer.BadParameter("provide exactly one of --config or --actions")
+    try:
+        if config is not None:
+            from repopilot.connected import connected_session
+
+            with connected_session(workspace, config) as session:
+                yield session
+        else:
+            assert actions is not None
+            yield build_local_container(workspace), ScriptedRuntime(load_action_json(actions))
+    except (ValueError, OSError, RuntimeError) as error:
+        raise typer.BadParameter(str(error)) from None
 
 
 @app.command()
@@ -202,9 +323,7 @@ def _binary_check(name: str, *, required: bool) -> dict[str, Any]:
 
 def _report_payload(report: Any, run_root: Path) -> dict[str, Any]:
     showcase_task = report.cases[0].case_id if report.cases else None
-    showcase_workspace = (
-        run_root / "cases" / showcase_task if showcase_task is not None else None
-    )
+    showcase_workspace = run_root / "cases" / showcase_task if showcase_task is not None else None
     artifact_root = (
         showcase_workspace / "artifacts" / showcase_task
         if showcase_workspace is not None and showcase_task is not None

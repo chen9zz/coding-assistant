@@ -54,9 +54,7 @@ def test_resolve_contained_rejects_nul_byte(worktree: Path) -> None:
 
 def test_exact_configured_test_command_is_allowed(policy: PolicyEngine) -> None:
     """Dropping exact allowlist matching would block the required verification step."""
-    decision = policy.decide(
-        request("run_command", argv=["python", "-m", "pytest"])
-    )
+    decision = policy.decide(request("run_command", argv=["python", "-m", "pytest"]))
     assert decision.effect is PolicyEffect.ALLOW
 
 
@@ -64,6 +62,27 @@ def test_unlisted_non_destructive_command_requires_approval(policy: PolicyEngine
     """Auto-allowing an unreviewed command would expand model privileges silently."""
     decision = policy.decide(request("run_command", argv=["npm", "test"]))
     assert decision.effect is PolicyEffect.ASK
+
+
+@pytest.mark.parametrize("executable", ["cat", "head", "tail", "sed", "grep", "rg"])
+def test_unlisted_text_commands_redirect_without_running_or_requesting_approval(
+    policy: PolicyEngine, executable: str
+) -> None:
+    decision = policy.decide(request("run_command", argv=[executable, "src/app.py"]))
+    assert decision.effect is PolicyEffect.DENY
+    assert "read_file" in decision.reason and "search" in decision.reason
+
+
+def test_explicit_text_command_allowlist_still_requires_exact_arguments(worktree: Path) -> None:
+    engine = PolicyEngine(worktree, allowed_commands=[("cat", "src/app.py")])
+    assert (
+        engine.decide(request("run_command", argv=["cat", "src/app.py"])).effect
+        is PolicyEffect.ALLOW
+    )
+    assert (
+        engine.decide(request("run_command", argv=["cat", "../secret"])).effect is PolicyEffect.DENY
+    )
+    assert engine.decide(request("run_command", argv=["ps", "-p", "1"])).effect is PolicyEffect.ASK
 
 
 @pytest.mark.parametrize(

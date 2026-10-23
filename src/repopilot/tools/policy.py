@@ -69,7 +69,7 @@ def change_scope_violation(
 class PolicyEngine:
     """Classify tool effects without trusting the model's description."""
 
-    _READ_ONLY = frozenset({"git_diff", "repo_map"})
+    _READ_ONLY = frozenset({"git_diff", "repo_map", "skill_read"})
     _PATH_TOOLS = frozenset({"read_file", "search"})
     _DENIED_EXECUTABLES = frozenset(
         {
@@ -96,16 +96,20 @@ class PolicyEngine:
         *,
         allowed_commands: Iterable[tuple[str, ...]] = (),
         allowed_mcp_tools: Iterable[str] = (),
+        allowed_delegation_tools: Iterable[str] = (),
         allowed_paths: Iterable[str] = (),
         max_changed_files: int | None = None,
     ) -> None:
         self.worktree = worktree.resolve(strict=True)
         self.allowed_commands = frozenset(tuple(command) for command in allowed_commands)
         self.allowed_mcp_tools = frozenset(allowed_mcp_tools)
+        self.allowed_delegation_tools = frozenset(allowed_delegation_tools)
         self.allowed_paths = tuple(allowed_paths)
         self.max_changed_files = max_changed_files
 
     def decide(self, request: ToolRequest) -> PolicyDecision:
+        if request.name in self.allowed_delegation_tools:
+            return self._decision(PolicyEffect.ALLOW, "host-scoped read-only delegation", request)
         if request.name in self._READ_ONLY:
             return self._decision(PolicyEffect.ALLOW, "registered read-only evidence tool", request)
         if request.name in self._PATH_TOOLS:
@@ -194,6 +198,14 @@ class PolicyEngine:
         if argv in self.allowed_commands:
             return self._decision(
                 PolicyEffect.ALLOW, "command exactly matches the allowlist", request
+            )
+        if executable in {"cat", "head", "tail", "sed", "grep", "rg"}:
+            return self._decision(
+                PolicyEffect.DENY,
+                "Unlisted text command was not executed. Use read_file for files or search "
+                "for text; native tools retain path, size and time limits. Do not retry "
+                "this command with another executable path.",
+                request,
             )
         return self._decision(PolicyEffect.ASK, "command requires explicit human approval", request)
 

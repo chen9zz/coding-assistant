@@ -75,7 +75,7 @@ def test_serve_builds_the_api_and_binds_to_loopback_by_default(
     assert result.exit_code == 0
     assert observed["host"] == "127.0.0.1"
     assert observed["port"] == 8000
-    assert observed["api"].title == "RepoPilot-R API"  # type: ignore[attr-defined]
+    assert observed["api"].title == "ForgePilot API"  # type: ignore[attr-defined]
 
 
 def test_approve_command_authorizes_the_exact_persisted_request(tmp_path: Path) -> None:

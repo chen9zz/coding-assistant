@@ -1,2 +1,2 @@
-"""Local and optional production adapters for RepoPilot-R ports."""
+"""Local and optional production adapters for ForgePilot ports."""
 

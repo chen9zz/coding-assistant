@@ -55,6 +55,9 @@ class ToolRegistry:
 
 class ReadFileTool:
     name = "read_file"
+    _DEFAULT_LIMIT = 64_000
+    _MAX_LIMIT = 64_000
+    _BINARY_PROBE_BYTES = 8192
 
     def __init__(self, max_bytes: int = 64_000) -> None:
         self.max_bytes = max_bytes
@@ -68,6 +71,22 @@ class ReadFileTool:
             return _failure(request, "path must be text", started)
         if timeout_seconds is not None and timeout_seconds <= 0:
             return _failure(request, "task time budget is exhausted", started)
+        offset = request.arguments.get("offset", 0)
+        if type(offset) is not int:
+            return _failure(request, "offset must be an integer number of bytes", started)
+        if offset < 0:
+            return _failure(request, "offset must be a nonnegative integer", started)
+        if "limit" in request.arguments:
+            limit = request.arguments["limit"]
+        else:
+            limit = min(self._DEFAULT_LIMIT, self.max_bytes)
+        max_limit = min(self._MAX_LIMIT, self.max_bytes)
+        if type(limit) is not int:
+            return _failure(request, "limit must be an integer number of bytes", started)
+        if limit <= 0:
+            return _failure(request, "limit must be a positive integer", started)
+        if limit > max_limit:
+            return _failure(request, f"limit exceeds the maximum of {max_limit} bytes", started)
         descriptor: int | None = None
         try:
             path = resolve_contained(worktree, raw_path)
@@ -76,32 +95,58 @@ class ReadFileTool:
             file_stat = os.fstat(descriptor)
             if not stat.S_ISREG(file_stat.st_mode):
                 raise OSError("read_file only accepts regular files")
-            chunks = bytearray()
-            while len(chunks) <= self.max_bytes:
+            header = bytearray()
+            while len(header) < self._BINARY_PROBE_BYTES:
                 if timeout_seconds is not None and time.monotonic() - started >= timeout_seconds:
                     raise OSError("read_file exceeded task deadline")
-                chunk = os.read(descriptor, self.max_bytes + 1 - len(chunks))
+                chunk = os.read(descriptor, self._BINARY_PROBE_BYTES - len(header))
+                if not chunk:
+                    break
+                header.extend(chunk)
+            if b"\x00" in header:
+                raise OSError("binary files are not returned to the model")
+            chunks = bytearray(header)
+            beyond_eof = file_stat.st_size <= offset
+            if beyond_eof:
+                # The probe already consumed the file; return no body and keep the
+                # caller's original offset in the result metadata.
+                chunks.clear()
+            elif len(chunks) <= offset:
+                if len(chunks) < file_stat.st_size:
+                    os.lseek(descriptor, offset, os.SEEK_SET)
+                chunks.clear()
+            else:
+                chunks = chunks[offset:]
+            while not beyond_eof and len(chunks) <= limit:
+                if timeout_seconds is not None and time.monotonic() - started >= timeout_seconds:
+                    raise OSError("read_file exceeded task deadline")
+                chunk = os.read(descriptor, limit + 1 - len(chunks))
                 if not chunk:
                     break
                 chunks.extend(chunk)
+            if beyond_eof:
+                chunks.clear()
             data = bytes(chunks)
         except (OSError, PathPolicyError) as error:
             return _failure(request, str(error), started)
         finally:
             if descriptor is not None:
                 os.close(descriptor)
-        if b"\x00" in data[:8192]:
+        if b"\x00" in data:
             return _failure(request, "binary files are not returned to the model", started)
-        bounded = data[: self.max_bytes]
+        bounded = data[:limit]
+        end = offset + len(bounded)
         return _success(
             request,
             {
                 "path": raw_path,
                 "content": bounded.decode("utf-8", errors="replace"),
                 "size_bytes": file_stat.st_size,
+                "offset": offset,
+                "next_offset": end if file_stat.st_size > end else None,
             },
             started,
-            truncated=file_stat.st_size > len(bounded),
+            truncated=file_stat.st_size > end,
         )
 
 
@@ -124,7 +169,18 @@ class SearchTool:
         except (OSError, PathPolicyError) as error:
             return _failure(request, str(error))
         result = self.runner.run(
-            ["rg", "--line-number", "--no-heading", "--color", "never", query, str(path)],
+            [
+                "rg",
+                "--no-config",
+                "--line-number",
+                "--no-heading",
+                "--color",
+                "never",
+                "-e",
+                query,
+                "--",
+                str(path),
+            ],
             cwd=worktree,
             timeout_seconds=_bounded_timeout(10, timeout_seconds),
             max_output_bytes=self.max_output_bytes,
@@ -178,12 +234,16 @@ class ApplyPatchTool:
         patch = request.arguments.get("patch")
         if not isinstance(patch, str) or not patch.strip():
             return _failure(request, "patch must be non-empty text")
+        # Tolerate a stray outer trailer, never a marker inside a hunk or file.
+        body = patch.rstrip("\r\n")
+        if body.endswith("\n*** End Patch"):
+            patch = body.removesuffix("*** End Patch")
         try:
             self._validate_paths(worktree, patch)
         except PathPolicyError as error:
             return _failure(request, str(error))
         check = self.runner.run(
-            ["git", "apply", "--check", "--whitespace=error", "-"],
+            ["git", "apply", "--check", "--recount", "--whitespace=error", "-"],
             cwd=worktree,
             timeout_seconds=_bounded_timeout(15, timeout_seconds),
             max_output_bytes=64_000,
@@ -200,12 +260,10 @@ class ApplyPatchTool:
                 truncated=check.truncated,
             )
         apply_budget = (
-            None
-            if timeout_seconds is None
-            else timeout_seconds - (time.monotonic() - started)
+            None if timeout_seconds is None else timeout_seconds - (time.monotonic() - started)
         )
         applied = self.runner.run(
-            ["git", "apply", "--whitespace=error", "-"],
+            ["git", "apply", "--recount", "--whitespace=error", "-"],
             cwd=worktree,
             timeout_seconds=_bounded_timeout(15, apply_budget),
             max_output_bytes=64_000,

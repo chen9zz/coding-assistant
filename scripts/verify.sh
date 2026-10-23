@@ -31,7 +31,7 @@ echo "[2/7] mypy"
 
 echo "[3/7] pytest + branch coverage"
 "$python_bin" -m pytest -q -W error::ResourceWarning \
-  --cov=repopilot --cov-branch --cov-report=term --cov-fail-under=85
+  --cov="$project_root/src/repopilot" --cov-branch --cov-report=term --cov-fail-under=85
 
 echo "[4/7] offline benchmark"
 "$python_bin" -m repopilot.cli eval --workspace "$evaluation_workspace" --json

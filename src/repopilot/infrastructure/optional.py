@@ -9,7 +9,7 @@ class OptionalDependencyError(RuntimeError):
     def __init__(self, *, extra: str, dependency: str) -> None:
         self.extra = extra
         self.dependency = dependency
-        self.install_command = f'python -m pip install "repopilot-r[{extra}]"'
+        self.install_command = f'python -m pip install -e ".[{extra}]"'
         super().__init__(
             f"{dependency} is required for this integration; install it with: "
             f"{self.install_command}"

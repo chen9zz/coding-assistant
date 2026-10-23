@@ -53,6 +53,12 @@ class ProcessRunner:
         }
         environment["PYTHONIOENCODING"] = "utf-8"
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        # An editable host install must not win over the candidate in a src-layout
+        # project. This is derived locally, never inherited or supplied by a model.
+        if Path(argv[0]).name.startswith("python") and list(argv[1:3]) == ["-m", "pytest"]:
+            candidate_source = (resolved_cwd / "src").resolve()
+            if candidate_source.is_relative_to(resolved_cwd) and candidate_source.is_dir():
+                environment["PYTHONPATH"] = str(candidate_source)
         if extra_env:
             disallowed = set(extra_env) - self._ENV_ALLOWLIST
             if disallowed:

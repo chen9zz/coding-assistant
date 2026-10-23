@@ -319,11 +319,17 @@ class RepositoryMapper:
         snippets = list(repo_map.snippets)
         symbols = list(repo_map.symbols)
         files = list(repo_map.files)
-        while snippets or symbols or files:
+        imports = dict(repo_map.imports)
+        test_files = list(repo_map.test_files)
+        while snippets or symbols or imports or test_files or files:
             if snippets:
                 snippets.pop()
             elif symbols:
                 symbols.pop()
+            elif imports:
+                imports.popitem()
+            elif test_files:
+                test_files.pop()
             else:
                 files.pop()
             candidate = repo_map.model_copy(
@@ -331,6 +337,8 @@ class RepositoryMapper:
                     "files": tuple(files),
                     "symbols": tuple(symbols),
                     "snippets": tuple(snippets),
+                    "imports": dict(imports),
+                    "test_files": tuple(test_files),
                     "truncated": True,
                 }
             )

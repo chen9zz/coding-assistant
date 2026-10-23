@@ -69,6 +69,7 @@ class TaskSpec(FrozenModel):
     )
     max_changed_files: Annotated[int | None, Field(ge=1, le=1000)] = None
     max_steps: Annotated[int, Field(ge=1, le=100)] = 24
+    max_context_chars: Annotated[int, Field(ge=24_000, le=1_000_000)] = 128_000
     timeout_seconds: Annotated[int, Field(ge=1, le=3600)] = 300
 
     @field_validator("test_command", mode="before")

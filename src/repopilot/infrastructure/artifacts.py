@@ -155,7 +155,7 @@ class ArtifactBundleWriter:
         return (
             f"# {issue}\n\n"
             "## Summary\n\n"
-            f"RepoPilot-R produced and reviewed a bounded patch for: {issue}\n\n"
+            f"ForgePilot produced and reviewed a bounded patch for: {issue}\n\n"
             "## Changed paths\n\n"
             f"{paths}\n\n"
             "## Verification\n\n"

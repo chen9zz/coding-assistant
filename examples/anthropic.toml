@@ -1,0 +1,12 @@
+[provider]
+protocol = "anthropic"
+base_url = "https://api.anthropic.com/v1"
+model = "REPLACE_WITH_YOUR_TOOL_CAPABLE_MODEL_ID"
+api_key_env = "ANTHROPIC_API_KEY"
+timeout_seconds = 90
+
+[provider.request_options]
+max_tokens = 8192
+
+[skills]
+roots = []

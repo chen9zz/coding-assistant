@@ -39,6 +39,23 @@ class RecordingGateway:
         )
 
 
+def test_loop_passes_remaining_budget_to_network_runtime(tmp_path: Path) -> None:
+    class DeadlineRuntime:
+        def next_action(self, context: AgentContext) -> AgentAction:
+            raise AssertionError("unbounded model call")
+
+        def next_action_with_timeout(
+            self, context: AgentContext, timeout_seconds: float
+        ) -> AgentAction:
+            assert 0 < timeout_seconds <= 1
+            return AgentAction.final("bounded")
+
+    answer = MinimalAgentLoop(max_steps=1, max_elapsed_seconds=1).run(
+        "deadline", DeadlineRuntime(), RecordingGateway(), tmp_path, AgentContext.empty()
+    )
+    assert answer.text == "bounded"
+
+
 def test_loop_pairs_tool_result_and_stops_on_structured_final(tmp_path: Path) -> None:
     """Dropping the paired result would make the model unaware of its own side effect."""
     runtime = ScriptedRuntime(
@@ -107,6 +124,156 @@ def test_loop_stops_repeated_equivalent_tool_requests(tmp_path: Path) -> None:
         MinimalAgentLoop(max_steps=5, max_repeated_calls=2).run(
             "task-1", runtime, RecordingGateway(), tmp_path, AgentContext.empty()
         )
+
+
+def test_host_verification_can_rerun_after_each_successful_patch(tmp_path: Path) -> None:
+    runtime = ScriptedRuntime(
+        [
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="v1"
+            ),
+            AgentAction.tool("apply_patch", {"patch": "first"}, operation_id="p1"),
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="v2"
+            ),
+            AgentAction.tool("apply_patch", {"patch": "second"}, operation_id="p2"),
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="v3"
+            ),
+            AgentAction.final("verified"),
+        ]
+    )
+    answer = MinimalAgentLoop(max_steps=6, verification_command=("python", "acceptance.py")).run(
+        "repair", runtime, RecordingGateway(), tmp_path, AgentContext.empty()
+    )
+    assert answer.text == "verified"
+
+
+@pytest.mark.parametrize("patch_status", [ToolStatus.FAILED, ToolStatus.DENIED])
+def test_failed_patch_does_not_reset_verification_repeat_guard(
+    tmp_path: Path, patch_status: ToolStatus
+) -> None:
+    class Gateway(RecordingGateway):
+        def execute(self, task_id, worktree, request, *, timeout_seconds=None):
+            result = super().execute(task_id, worktree, request, timeout_seconds=timeout_seconds)
+            return (
+                result.model_copy(update={"status": patch_status})
+                if request.name == "apply_patch"
+                else result
+            )
+
+    runtime = ScriptedRuntime(
+        [
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="v1"
+            ),
+            AgentAction.tool("apply_patch", {"patch": "bad"}, operation_id="p1"),
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="v2"
+            ),
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="v3"
+            ),
+        ]
+    )
+    gateway = Gateway()
+    with pytest.raises(RepeatedToolCall):
+        MinimalAgentLoop(max_steps=5, verification_command=("python", "acceptance.py")).run(
+            "repair", runtime, gateway, tmp_path, AgentContext.empty()
+        )
+    assert len(gateway.requests) == 3
+
+
+def test_other_command_repeats_are_not_reset_by_patches(tmp_path: Path) -> None:
+    runtime = ScriptedRuntime(
+        [
+            AgentAction.tool("run_command", {"argv": ["npm", "test"]}, operation_id="v1"),
+            AgentAction.tool("apply_patch", {"patch": "first"}, operation_id="p1"),
+            AgentAction.tool("run_command", {"argv": ["npm", "test"]}, operation_id="v2"),
+            AgentAction.tool("apply_patch", {"patch": "second"}, operation_id="p2"),
+            AgentAction.tool("run_command", {"argv": ["npm", "test"]}, operation_id="v3"),
+        ]
+    )
+    with pytest.raises(RepeatedToolCall):
+        MinimalAgentLoop(max_steps=6, verification_command=("python", "acceptance.py")).run(
+            "repair", runtime, RecordingGateway(), tmp_path, AgentContext.empty()
+        )
+
+
+def test_resume_reconstructs_verification_invalidation_from_persisted_results(
+    tmp_path: Path,
+) -> None:
+    context = AgentContext.empty()
+    for index, name in enumerate(["run_command", "run_command", "apply_patch"]):
+        request = ToolRequest(
+            operation_id=f"old-{index}",
+            name=name,
+            arguments={"argv": ["python", "acceptance.py"]}
+            if name == "run_command"
+            else {"patch": "successful edit"},
+        )
+        context = context.with_exchange(
+            ToolExchange(
+                request=request,
+                result=ToolResult(
+                    operation_id=request.operation_id, tool_name=name, status=ToolStatus.SUCCEEDED
+                ),
+            )
+        )
+    runtime = ScriptedRuntime(
+        [
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="new"
+            ),
+            AgentAction.final("verified after resume"),
+        ]
+    )
+    result = MinimalAgentLoop(max_steps=2, verification_command=("python", "acceptance.py")).run(
+        "repair", runtime, RecordingGateway(), tmp_path, context
+    )
+    assert result.text == "verified after resume"
+
+
+def test_verification_invalidation_does_not_extend_total_step_budget(tmp_path: Path) -> None:
+    runtime = ScriptedRuntime(
+        [
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="v1"
+            ),
+            AgentAction.tool("apply_patch", {"patch": "edit"}, operation_id="p1"),
+            AgentAction.final("must not run"),
+        ]
+    )
+    with pytest.raises(StepBudgetExceeded):
+        MinimalAgentLoop(max_steps=2, verification_command=("python", "acceptance.py")).run(
+            "repair", runtime, RecordingGateway(), tmp_path, AgentContext.empty()
+        )
+    assert len(runtime.contexts) == 2
+
+
+def test_replaying_a_successful_patch_cannot_reset_verification_again(tmp_path: Path) -> None:
+    runtime = ScriptedRuntime(
+        [
+            AgentAction.tool("apply_patch", {"patch": "edit"}, operation_id="patch-one"),
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="v1"
+            ),
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="v2"
+            ),
+            AgentAction.tool("apply_patch", {"patch": "edit"}, operation_id="patch-one"),
+            AgentAction.tool(
+                "run_command", {"argv": ["python", "acceptance.py"]}, operation_id="v3"
+            ),
+            AgentAction.final("must not succeed"),
+        ]
+    )
+    gateway = RecordingGateway()
+    with pytest.raises(RepeatedToolCall):
+        MinimalAgentLoop(max_steps=6, verification_command=("python", "acceptance.py")).run(
+            "repair", runtime, gateway, tmp_path, AgentContext.empty()
+        )
+    assert len(gateway.requests) == 4
 
 
 def test_loop_honours_cancellation_before_next_model_action(tmp_path: Path) -> None:

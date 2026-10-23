@@ -9,6 +9,7 @@ import type {
   TaskState,
 } from "./types";
 import "./styles.css";
+import Workbench from "./Workbench";
 
 const stages: TaskState[] = [
   "CREATED",
@@ -31,8 +32,11 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchTasks(controller.signal)
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = () => { void fetchTasks(controller.signal)
       .then((loaded) => {
+        if (controller.signal.aborted) return;
+        setError(null);
         setTasks(loaded);
         setSelectedId((current) => current ?? loaded[0]?.task_id ?? null);
       })
@@ -42,9 +46,13 @@ function App() {
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          timer = setTimeout(refresh, 3000);
+        }
+      }); };
+    refresh();
+    return () => { controller.abort(); clearTimeout(timer); };
   }, []);
 
   const selected = tasks.find((task) => task.task_id === selectedId) ?? null;
@@ -89,32 +97,23 @@ function App() {
     [events],
   );
 
-  if (loading) return <CenteredState title="Loading durable runs…" detail="Reading local evidence" />;
-  if (error) return <CenteredState title="Dashboard unavailable" detail={error} tone="error" />;
-  if (tasks.length === 0) {
-    return (
-      <CenteredState
-        title="No agent runs yet"
-        detail="Run the offline demo, then open this page to inspect its evidence trail."
-      />
-    );
-  }
-
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="brand-lockup">
-          <span className="brand-mark" aria-hidden="true">R</span>
+          <span className="brand-mark" aria-hidden="true">F</span>
           <div>
             <p className="eyebrow">Reliable software agent</p>
-            <h1>RepoPilot-R</h1>
+            <h1>ForgePilot</h1>
           </div>
         </div>
         <div className={`stream-status stream-${streamStatus}`} role="status">
           <span aria-hidden="true" /> {streamLabel(streamStatus)}
         </div>
       </header>
-
+      <Workbench />
+      <div className="audit-heading"><p className="eyebrow">Inspect the evidence</p><h2>Run audit</h2></div>
+      {loading ? <CenteredState title="Loading durable runs…" detail="Reading local evidence" /> : error ? <CenteredState title="Audit unavailable" detail={error} tone="error" /> : tasks.length === 0 ? <CenteredState title="No agent runs yet" detail="Submit an implementation task above to build an evidence trail." /> :
       <div className="dashboard-grid">
         <aside className="run-panel" aria-label="Agent runs">
           <div className="panel-heading">
@@ -140,7 +139,7 @@ function App() {
           </nav>
           <div className="privacy-note">
             <span aria-hidden="true">◈</span>
-            <p><b>Safe by default</b>No prompt, secret, or raw file content is rendered.</p>
+            <p><b>Local evidence</b>Inspect events, verification results, and redacted artifacts.</p>
           </div>
         </aside>
 
@@ -157,7 +156,7 @@ function App() {
             </section>
 
             <section className="metric-grid" aria-label="Reliability metrics">
-              <Metric label="Durable events" value={artifacts?.event_count ?? selected.sequence} note="SQLite-backed" />
+              <Metric label="Durable events" value={artifacts?.event_count ?? selected.sequence} note="Durable event store" />
               <Metric label="Recovery" value={recoveries} note={recoveries ? "Idempotent replay" : "No replay needed"} />
               <Metric label="Policy denials" value={denials} note="Fail-closed gateway" />
               <Metric label="Verification" value={selected.state === "SUCCEEDED" ? "PASS" : "—"} note={selected.spec.test_command.join(" ")} />
@@ -218,13 +217,13 @@ function App() {
             </section>
           </main>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
 
 function CenteredState({ title, detail, tone = "normal" }: { title: string; detail: string; tone?: "normal" | "error" }) {
-  return <main className={`centered-state ${tone}`}><span className="brand-mark">R</span><h1>{title}</h1><p>{detail}</p></main>;
+  return <section className={`centered-state ${tone}`}><h2>{title}</h2><p>{detail}</p></section>;
 }
 
 function StateBadge({ state }: { state: TaskState }) {

@@ -1,30 +1,57 @@
-# RepoPilot-R
+# ForgePilot
 
-RepoPilot-R 是一个面向代码仓库的可靠性优先软件工程 Agent。输入仓库、Issue 和允许执行的测试命令后，它在独立 Git worktree 中建立代码地图，驱动有界工具调用循环，应用补丁并执行确定性验证，最后产出 patch、测试报告、完整事件轨迹和 PR 草稿。模型负责提出动作，宿主程序保留权限、状态、执行和验收权。
+面向代码仓库修复的 Agent 工作台。接入真实模型 API，在独立 Git worktree 中分析代码、调用工具、修改补丁，再由宿主执行固定验收命令，生成补丁、测试报告、事件轨迹和 PR 草稿。
 
-这个仓库不是聊天界面套壳。它专门解决软件 Agent 最容易被忽略的工程问题：越权工具调用、重复副作用、进程崩溃后的重放、上下文无限增长、结果无法审计，以及“模型说已修好”却没有测试证据。
+**React 工作台 + Textual TUI + 独立后台任务 + 只读分析子代理 + MySQL + MCP / Skills。**
+从[快速开始](docs/QUICKSTART.md)进入 Demo，再按[真实模型 E2E](docs/LIVE_E2E.md)准备在线验收。MySQL 配置见[数据库说明](docs/MYSQL.md)。API Key 只留在本机服务进程环境，不进网页、TOML、任务描述或 Git。
 
-## 已验证结果
+原名 RepoPilot-R，现统一使用 ForgePilot；Python 模块 `repopilot` 与旧命令保留兼容。仓库地址仍为 `chen9zz/coding-assistant`。
 
-2026-08-24 在 Python 3.13.13、macOS arm64 上运行完整验证脚本，得到以下结果：
+![ForgePilot 离线工作台](docs/generated/forgepilot-demo.png)
 
-- 133 个 Python 测试通过，分支覆盖率 85.83%
-- Ruff 与严格 mypy 检查通过
-- 3/3 个内置离线修复任务通过隐藏测试和改动范围检查
-- 故障注入场景完成 1 次恢复，0 次策略违规
-- React 仪表盘 2 个组件测试、TypeScript 类型检查和 Vite 生产构建通过
+*截图为离线 fixture 演示，不代表真实模型结果。真实 DeepSeek 验证单独记录如下。*
 
-这 3 个任务是仓库内置的确定性 fixture，不是 SWE-bench 成绩。原始结果的归一化快照和校验值见[评估说明](docs/EVALUATION.md)。
+## 已实现的能力
+
+| 能力 | 实现与边界 |
+| --- | --- |
+| 模型接入 | 原生 HTTP 适配 OpenAI-compatible / Anthropic 协议，可配置 endpoint 与模型；已完成真实 DeepSeek 调用验证 |
+| 仓库上下文 | Tree-sitter 与 ripgrep，限制上下文体积；有界字节分页读取及独立二进制前缀检查 |
+| MCP 与 Skills | MCP SDK 2，stdio / Streamable HTTP、工具白名单；按需读取 SKILL.md 及引用资料 |
+| 后台执行 | 独立 worker、本地持久队列、恢复与取消；子代理仅做只读分析，不执行命令、不改文件、不递归派生 |
+| 权限与验收 | Git worktree、路径/命令检查、精确审批、步数/时限预算；宿主独立复跑验收 |
+| 持久化与回放 | MySQL / SQLite 保存任务、事件和操作结果，SQLite 保存后台队列；已提交结果可重放，结果不确定的副作用停止重试 |
+| 交互与证据 | React / SSE 展示状态、审批与工件；Textual TUI 连接同一服务；仅生成 PR 草稿，不自动推送 |
+
+## 验证结果
+
+2026-10-23（Pacific/Auckland），Python 3.13.13 / macOS arm64：
+
+| 范围 | 结果 |
+| --- | --- |
+| 发布前全量回归，启用真实 MySQL | 340 passed，1 项 SQLite 专属 skip |
+| 综合覆盖率（语句与分支合计） | 87.95%，保留 85% 门槛 |
+| 前端 | 11 项测试、TypeScript 检查及生产构建通过 |
+| 真实模型仓库任务 | DeepSeek + MySQL 闭环 SUCCEEDED；32 项独立验收及 236 项候选仓库测试通过，宿主与后续独立复测均通过 |
+| 离线评估 | 3/3 确定性 fixture 通过；不是模型能力榜单或 SWE-bench 成绩 |
+
+真实任务经过**八轮调试、人工定位反馈和检查点续修**，不是一次零干预成功。236 项是历史候选仓库测试数，不与宿主测试数相加。简历所引用的前一轮宿主结果为 339 项通过、87.97%；本次发布新增一项公开 Git 历史兼容回归后为 340 项，覆盖率以当次完整执行统计为准。失败历史、验收版本与工件摘要见[真实验收报告](docs/LIVE_E2E_VERIFICATION.md)和[排错记录](docs/DEBUG_JOURNAL.md)。
+
+历史结果保留在 [0.1 验证](docs/VERIFICATION_REPORT.md)、[0.2 验证](docs/CONNECTED_VERIFICATION.md)和 [0.3 初始验证](docs/FORGEPILOT_VERIFICATION.md)，不作为当前版本成绩。
 
 ## 架构
 
 ```text
-CLI / FastAPI v1 / SSE / React 19 dashboard
+Textual TUI / React 19 workbench / CLI
+                    |
+     Loopback control API / persistent jobs
+                    |
+  Background worker + read-only analysis children
                     |
           TaskApplicationService
                     |
         DurableTaskOrchestrator
-     state machine + SQLite event log
+     state machine + SQLite / MySQL event log
                     |
              MinimalAgentLoop
                     |
@@ -34,32 +61,50 @@ CLI / FastAPI v1 / SSE / React 19 dashboard
  Git worktree / repo map / patch / tests / artifacts
 ```
 
-核心后端使用 Python 3.12+、Pydantic 2、SQLite、FastAPI、Typer、Tree-sitter 和 ripgrep。前端使用 React 19、TypeScript 5.9、Vite 7 与 Vitest。可选适配层支持 OpenAI Agents SDK、MCP 2 和 OpenTelemetry；离线核心不需要 API Key，也不把 Docker 当作本地演示的前置条件。
+核心后端使用 Python 3.12+、Pydantic 2、FastAPI、Textual、SQLite、SQLAlchemy/PyMySQL、Tree-sitter 和 ripgrep。前端使用 React 19、TypeScript、Vite 与 Vitest。原生 HTTP 适配 OpenAI-compatible / Anthropic 协议，支持 MCP 2 和 Skills 按需加载；离线核心不需要 API Key 或 Docker。MySQL 存任务/事件，进程队列仍是本地 SQLite，不宣称分布式调度。子代理仅分析，不拥有命令、修改、MCP 或递归派生能力。
 
 ## 五分钟运行
 
+需要 Python 3.12+、Git、ripgrep 和 Node.js 24。首次运行：
+
 ```bash
-python3.13 -m venv .venv
+git clone https://github.com/chen9zz/coding-assistant.git
+cd coding-assistant
+python3 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
 npm --prefix web ci
-.venv/bin/repopilot doctor
-.venv/bin/repopilot demo --workspace /tmp/repopilot-portfolio --json
-sh scripts/verify.sh
+npm --prefix web run build
+.venv/bin/forgepilot ui --demo --workspace /tmp/forgepilot-demo-001
 ```
 
-`demo` 每次要求新的工作目录，防止旧证据被覆盖。想看 API 与网页界面时，打开两个终端：
+打开 http://127.0.0.1:8765 即可提交离线 Demo；另开终端使用 TUI：
 
 ```bash
-.venv/bin/repopilot serve \
-  --workspace /tmp/repopilot-portfolio/demo-run/cases/config_validation
-npm --prefix web run dev
+.venv/bin/forgepilot tui --url http://127.0.0.1:8765
 ```
 
-浏览器访问 `http://127.0.0.1:5173`。Vite 会把 `/v1`、`/health` 和 `/ready` 代理到本地 API。接口文档位于 `http://127.0.0.1:8000/docs`。
+Demo 是固定脚本，不会根据输入自由编程，不代表真实模型表现。在线使用需要显式 `--repo`、`--config` 和固定验收命令，详见快速开始。界面只绑定本机，有同源、Host 与请求 token 校验，不是公网多用户服务。
 
-这里的 API 与网页直接读取刚才 demo 生成的同一份 `state.db`、worktree 和四件套证据，不会启动一个空白工作区。`demo --json` 也会在 `showcase.workspace` 中打印这个准确路径。
+完整离线验证运行 `sh scripts/verify.sh`。已有 CLI `demo`、`run`、`resume` 和旧审计 API 仍兼容；日常界面优先使用新的 `ui` 入口。
+
+默认测试未配置数据库时会跳过真实 MySQL 用例；按[数据库说明](docs/MYSQL.md)显式启用测试并安全注入凭据。`benchmarks/live-e2e-baseline.bundle` 是固定历史源码 fixture，用于复现缺失分页的基线，不是数据库或真实任务运行数据。
+
+基线包保持原始提交身份，内部包含早期源码、测试和开发规划笔记；这些历史文本也经过发布审查。它不包含本轮真实模型调用的工作区、数据库或原始轨迹。
+
+## 安全与使用限制
+
+- Key 与数据库密码不进浏览器、源码、任务或 Git。模型调用可能向配置供应商发送仓库内容，使用前确认数据授权与费用。
+- Git worktree、命令策略与环境过滤不是 OS 级恶意代码沙箱，仅用于个人可信仓库。Docker Compose 仅提供可选 MySQL 测试环境。
+- 本机 Host、同源及控制 token 检查不是用户登录认证。云端认证与执行隔离仍属于[部署方案](docs/CLOUD_DEPLOYMENT_PLAN.md)，不是已上线能力。
+- `.env`、私钥、密码文件、数据库、运行日志、任务工作区及本机构建目录不纳入版本控制。公开文档保留脱敏调试说明与验收摘要，不包含真实任务原始日志。
 
 ## 交付导航
+
+- [真实 DeepSeek + MySQL 端到端验收（2026-10-23）](docs/LIVE_E2E_VERIFICATION.md)
+- [本对话的问题与完整排错记录](docs/DEBUG_JOURNAL.md)
+- [不依赖本机的云端部署方案与上线门槛](docs/CLOUD_DEPLOYMENT_PLAN.md)
+
+- [真实模型 API、MCP、Skills 与能力边界](docs/CONNECTED_ASSISTANT.md)
 
 - [项目说明与架构](docs/PROJECT_GUIDE.md)
 - [重要代码逐行解析](docs/CODE_WALKTHROUGH.md)

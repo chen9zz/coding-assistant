@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
@@ -54,6 +54,7 @@ describe("RepoPilot dashboard", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === "/v1/control" || url === "/v1/jobs") return new Response("{}", { status: 404 });
         const body = url.endsWith("/artifacts")
           ? {
               task_id: task.task_id,
@@ -94,7 +95,7 @@ describe("RepoPilot dashboard", () => {
     );
   });
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   it("renders a failed tool event and recovery evidence", async () => {
     render(<App />);
@@ -138,10 +139,62 @@ describe("RepoPilot dashboard", () => {
   });
 
   it("shows a useful empty state", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify([]), { status: 200 }),
-    );
+    vi.mocked(fetch).mockImplementation(async (input) => String(input) === "/v1/tasks" ? Response.json([]) : new Response("{}", { status: 404 }));
     render(<App />);
     expect(await screen.findByText("No agent runs yet")).toBeInTheDocument();
+  });
+
+  it("keeps the composer available without audit runs and submits analysis with CSRF protection", async () => {
+    const requests: Array<{ url: string; options?: RequestInit }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, options });
+      if (url === "/v1/control") return Response.json({ name: "ForgePilot", mode: "demo", repository: "/workspace/demo", test_command: ["python", "-m", "pytest"], model: "offline", storage: "sqlite", csrf_token: "session-token" });
+      if (options?.method === "POST") return Response.json({ job_id: "job-new", task_id: null, kind: "analysis", state: "queued", parent_job_id: null, issue: "Explain validation", summary: null, error: null, created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T00:00:00Z" });
+      return Response.json([]);
+    }));
+    render(<App />);
+    const input = await screen.findByRole("textbox", { name: "Task prompt" });
+    expect(await screen.findByText("Demo · offline")).toBeInTheDocument();
+    expect(screen.getByText(/runs a fixed scripted example/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start task" })).toBeDisabled();
+    fireEvent.change(input, { target: { value: "  Explain validation  " } });
+    fireEvent.click(screen.getByRole("radio", { name: "Read-only analysis" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start analysis" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Explain validation" })).toBeInTheDocument());
+    const request = requests.find((entry) => entry.options?.method === "POST");
+    expect(request?.url).toBe("/v1/jobs");
+    expect(request?.options?.headers).toMatchObject({ "X-ForgePilot-Token": "session-token" });
+    expect(JSON.parse(String(request?.options?.body))).toEqual({ issue: "Explain validation", kind: "analysis" });
+    expect(input).toHaveValue("");
+  });
+
+  it("keeps the audit view usable when an older server has no control API", async () => {
+    render(<App />);
+    expect(await screen.findByText(/Task controls unavailable/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Fix configuration validation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start task" })).toBeDisabled();
+  });
+
+  it("discovers audit tasks created after the initially empty page loads", async () => {
+    vi.useFakeTimers();
+    let available = false;
+    vi.stubGlobal("fetch", vi.fn(async (input) => String(input) === "/v1/tasks" ? Response.json(available ? [task] : []) : new Response("{}", { status: 404 })));
+    render(<App />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByText("No agent runs yet")).toBeInTheDocument();
+    available = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(3100); });
+    expect(screen.getByRole("heading", { name: "Fix configuration validation" })).toBeInTheDocument();
+  });
+
+  it("does not claim a SQLite store when the configured backend is MySQL", async () => {
+    const originalFetch = fetch;
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, options?: RequestInit) => String(input) === "/v1/control" ? Promise.resolve(Response.json({ name: "ForgePilot", mode: "online", repository: "/workspace/demo", test_command: ["pytest"], model: "gpt", storage: "mysql", csrf_token: "token" })) : originalFetch(input, options)));
+    render(<App />);
+    await screen.findByText("gpt · mysql");
+    expect(await screen.findByText("Durable event store")).toBeInTheDocument();
+    expect(screen.queryByText("SQLite-backed")).not.toBeInTheDocument();
+    expect(screen.queryByText(/runs a fixed scripted example/)).not.toBeInTheDocument();
   });
 });

@@ -71,7 +71,7 @@ class TaskRunRequest(FrozenModel):
 
 def create_app(service: TaskApplicationService) -> FastAPI:
     app = FastAPI(
-        title="RepoPilot-R API",
+        title="ForgePilot API",
         version="1.0.0",
         description="Reliable issue-to-verified-patch task API.",
     )

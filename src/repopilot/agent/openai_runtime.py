@@ -139,7 +139,7 @@ class _AgentsSDKDecisionRunner:
         self._runner = agents.Runner
         catalog = ", ".join(tool_names)
         self._agent = agent_type(
-            name="RepoPilot-R decision agent",
+            name="ForgePilot decision agent",
             model=model,
             instructions=(
                 "Choose the next bounded repository action. Return structured output only. "
