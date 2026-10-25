@@ -132,15 +132,21 @@ def snapshot(root: Path, redactor: Redactor, deadline: float) -> tuple[dict[str,
     )
     if len(candidates) > 10_000:
         raise ValueError("RAG discovery exceeds 10000 paths")
-    ignored = set(
-        filter(
-            None,
-            run(
-                ["check-ignore", "--no-index", "-z", "--stdin"],
-                "\x00".join(sorted(candidates)) + "\x00",
-                (0, 1),
-            ).split("\x00"),
+    # An empty path set must not reach check-ignore: a bare NUL on stdin is
+    # rejected by Git (exit 128), failing otherwise valid empty repositories.
+    ignored = (
+        set(
+            filter(
+                None,
+                run(
+                    ["check-ignore", "--no-index", "-z", "--stdin"],
+                    "\x00".join(sorted(candidates)) + "\x00",
+                    (0, 1),
+                ).split("\x00"),
+            )
         )
+        if candidates
+        else set()
     )
     sources: dict[str, Source] = {}
     skipped = 0

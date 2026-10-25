@@ -82,6 +82,103 @@ def test_changes_same_size_deletions_and_restarts_refresh_index(tmp_path):
     assert search(tool, repo, "Determine").output["hits"] == []
 
 
+def empty_commit_repo(tmp_path):
+    from repopilot.tools.rag import RagSearchTool
+
+    repo = tmp_path / "empty"
+    repo.mkdir()
+    git(repo, "init", "-q")
+    git(repo, "config", "user.email", "test@example.invalid")
+    git(repo, "config", "user.name", "Test")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "empty")
+    return repo, RagSearchTool(tmp_path / "cache")
+
+
+def test_repository_with_valid_head_and_no_files_indexes_nothing(tmp_path):
+    from repopilot.tools.rag import RagSearchTool
+
+    repo, tool = empty_commit_repo(tmp_path)
+    result = search(tool, repo)
+    assert result.status is ToolStatus.SUCCEEDED
+    assert result.output["hits"] == []
+    assert result.output["indexed_files"] == 0
+    assert result.output["updated_files"] == 0
+    assert result.output["removed_files"] == 0
+    assert result.output["skipped_files"] == 0
+    assert result.output["base_commit"] == git(repo, "rev-parse", "HEAD").strip()
+
+    # A new untracked Markdown file is indexed on the next operation.
+    (repo / "guide.md").write_text("# Guide\nrecoverymarker evidence\n")
+    added = search(tool, repo, "recoverymarker")
+    assert added.status is ToolStatus.SUCCEEDED
+    assert added.output["indexed_files"] == 1
+    assert added.output["updated_files"] == 1
+    assert added.output["hits"][0]["path"] == "guide.md"
+
+    # Removing the only Git-visible file clears the index, also after a restart.
+    (repo / "guide.md").unlink()
+    emptied = search(tool, repo, "recoverymarker")
+    assert emptied.status is ToolStatus.SUCCEEDED
+    assert emptied.output["hits"] == []
+    assert emptied.output["indexed_files"] == 0
+    assert emptied.output["removed_files"] == 1
+    restarted = search(RagSearchTool(tmp_path / "cache"), repo, "recoverymarker")
+    assert restarted.status is ToolStatus.SUCCEEDED
+    assert restarted.output["hits"] == []
+    assert restarted.output["indexed_files"] == 0
+    assert restarted.output["updated_files"] == 0
+
+    # Indexing resumes for new content and later modifications.
+    (repo / "guide.md").write_text("# Guide\nrecoverymarker restored\n")
+    restored = search(tool, repo, "recoverymarker")
+    assert restored.status is ToolStatus.SUCCEEDED
+    assert restored.output["indexed_files"] == 1
+    assert restored.output["hits"][0]["path"] == "guide.md"
+    (repo / "guide.md").write_text("# Guide\nrecoverymarker changed\n")
+    changed = search(tool, repo, "recoverymarker")
+    assert changed.status is ToolStatus.SUCCEEDED
+    assert changed.output["updated_files"] == 1
+    assert "changed" in changed.output["hits"][0]["text"]
+
+
+def test_deleting_last_indexed_markdown_file_clears_tracked_index(tmp_path):
+    from repopilot.tools.rag import RagSearchTool
+
+    repo, tool = setup(tmp_path)
+    # An empty commit keeps HEAD valid after the fixture files leave the worktree.
+    git(repo, "commit", "-q", "--allow-empty", "-m", "empty")
+    git(repo, "rm", "-r", "-q", "maths.py", "README.md")
+    (repo / "notes.md").write_text("# Notes\nlastfilemarker evidence\n")
+    indexed = search(tool, repo, "lastfilemarker")
+    assert indexed.status is ToolStatus.SUCCEEDED
+    assert indexed.output["indexed_files"] == 1
+    assert indexed.output["hits"][0]["path"] == "notes.md"
+    assert git(repo, "ls-files", "--others", "--exclude-standard").strip() == "notes.md"
+
+    (repo / "notes.md").unlink()
+    assert git(repo, "ls-files", "--cached", "--others", "--exclude-standard").strip() == ""
+    emptied = search(tool, repo, "lastfilemarker")
+    assert emptied.status is ToolStatus.SUCCEEDED
+    assert emptied.output["hits"] == []
+    assert emptied.output["indexed_files"] == 0
+    assert emptied.output["removed_files"] == 1
+    restarted = search(RagSearchTool(tmp_path / "cache"), repo, "lastfilemarker")
+    assert restarted.status is ToolStatus.SUCCEEDED
+    assert restarted.output["hits"] == []
+    assert restarted.output["indexed_files"] == 0
+
+    (repo / "fresh.md").write_text("# Fresh\nlastfilemarker again\n")
+    fresh = search(tool, repo, "lastfilemarker")
+    assert fresh.status is ToolStatus.SUCCEEDED
+    assert fresh.output["indexed_files"] == 1
+    assert fresh.output["hits"][0]["path"] == "fresh.md"
+    (repo / "fresh.md").write_text("# Fresh\nlastfilemarker updated\n")
+    updated = search(tool, repo, "lastfilemarker")
+    assert updated.status is ToolStatus.SUCCEEDED
+    assert updated.output["updated_files"] == 1
+    assert "updated" in updated.output["hits"][0]["text"]
+
+
 def test_chinese_short_literal_and_untrusted_instructions(tmp_path):
     repo, tool = setup(tmp_path)
     assert search(tool, repo, "检查点").output["hits"][0]["citation"] == "README.md:3-4"

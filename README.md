@@ -25,6 +25,8 @@
 
 ## 验证结果
 
+真实 RAG 验收（2026-10-25）：**DeepSeek + MySQL 任务 SUCCEEDED，8/8 固定验收、397 passed / 5 skipped**，宿主及任务完成后的独立复验均通过；主项目覆盖率 **88.52%**。两次在线尝试包含审批与人工诊断引导，第一轮取消，没有声称零干预一轮成功。检索引用、前后文件摘要及失败过程见 [真实 RAG 验收](docs/LIVE_RAG_VERIFICATION.md)。
+
 RAG 增量验证（2026-10-25）：**395 passed / 5 skipped，综合覆盖率 88.52%**（所有 warnings 当作错误）；前端 **12 tests**、类型检查和构建通过。包含真实 Git/SQLite 检索与本地 HTTP 驱动的“检索→补丁→更新检索→宿主验收”，不代表新增真实模型成绩。配置见 [RAG](docs/RAG.md)。
 
 Skills 增量验证（2026-10-25）：后端 **370 passed / 5 skipped**，综合覆盖率 **88.31%**；前端 **12 tests**、类型检查及构建通过。故障恢复结果见 [Skills 功能说明](docs/SKILLS.md) 和 [排错记录](docs/DEBUG_JOURNAL.md)。此次未重新调用真实模型或启用真实 MySQL；以下保留此前在线发布验证的历史证据。

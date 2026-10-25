@@ -312,3 +312,39 @@
 - 用户随后明确要求完成后同步 GitHub。发布前检查远端 main 与基线关系、待提交文件以及凭据模式，排除缓存、配置、数据库、真实轨迹和本地运行数据；与上一轮已验证 Skills 一起同步。
 
 - 最终完整后端回归：**395 passed、5 skipped、综合覆盖率 88.52%**，使用 `-W error`，无警告；跳过原因与上一轮相同（真实 MySQL 未启用及 SQLite 不适用的行锁用例），未降低 85% 覆盖率门槛。
+
+## 十二、真实 DeepSeek RAG 验收准备（2026-10-25）
+
+### D30：启动状态与凭据边界
+
+- 用户要求在本机启用 RAG 并执行真实 DeepSeek 仓库任务。检查时本地 8765 控制服务未运行，当前工具环境没有 DEEPSEEK_API_KEY，TOML 尚无 rag 配置。未提取其他进程环境或要求用户在聊天提供 Key。
+- 首次诊断误用了系统 python3，其没有 tomllib；改用项目既有 Python 3.13 虚拟环境后完成安全字段检查，只输出模型名、环境变量名、功能开关及服务状态，不输出凭据。
+- 备份原配置后添加 `[rag] enabled=true`，新建专用 start-rag-live.command；保留原入口和原任务数据。启动入口仍验证外部验收摘要、检查私有数据库密码文件、确认 MySQL 连接，然后在用户终端 getpass 隐藏输入 Key，仅注入服务环境。
+
+### D31：真实源码缺陷基线与固定外部验收
+
+- 采用本项目公开提交 `50d07d306c5431415771002b00228336c0c3a721` 的独立 Git clone，未对候选代码预先修复；目标是 RAG 对有有效 HEAD 的空 Git 仓库及删除最后一个文件后的处理。
+- 已复现原因范围：空文件列表仍提交给 `git check-ignore --stdin`，Git 失败被归类为检索不可用。不能通过取消 Git 根/HEAD 验证、允许旧结果或忽略所有 Git 错误解决。
+- 仓库外 0444 验收脚本与摘要已固定：8 项行为检查中，empty-committed-repo、last-file-deleted、restart-empty-index 三项失败，其余通过。通过特性检查后，还必须运行候选仓库完整 pytest，warnings 当作错误；ProcessRunner 保留原环境过滤与时限。
+- 任务要求模型修改前后分别调用新的 rag_search，记录同一源码文件的路径/行号/摘要；最终将独立比对事件、补丁范围、工件摘要和宿主复验，不能只依赖模型总结或 UI 状态。
+- 当前只是准备与失败基线证据，尚不能报告真实 DeepSeek 成功。已打开隔离 MySQL 和专用服务终端，等待用户在本机隐藏输入 Key；服务可用后再提交付费任务。
+
+### D32：第一轮在线尝试被取消，安全边界未放宽
+
+- 用户在本机输入新 Key 后，服务确认 online、DeepSeek、MySQL，且绑定本次独立仓库和固定验收命令。第一轮 job `2ef0d748-2760-444d-86eb-e6a88d4fe825` / task `ad049839-1db9-48ea-8a3d-03fe4025a752` 已实际访问模型并完成首次检索。
+- 逐次核对并批准一次 pwd、三次确切 pytest 命令；没有将其加入全局白名单。模型新增测试复现空仓库失败，却首先仅交换 Git 参数顺序，未触及根因。
+- 随后新增 debug 测试将模块 remaining 替换为固定返回值，同时试图删除不存在的 fixture .gitignore。该调试命令未获批准，任务在 WAITING_APPROVAL 状态被取消；不将此候选或不安全调试改动集成。
+- 观察器首次将 SSE 结束标记 `{last_sequence: ...}` 当作普通事件读取而报 KeyError，已按 event_type 过滤；只影响观察脚本，没有改变服务状态或验收结果。
+
+### D33：带诊断的第二轮完成真实闭环
+
+- 从干净 50d07d3 基线重新提交，明确提供“空 candidates 不应调用 check-ignore”“不得替换超时/过滤器”“删除未跟踪的最后文件才会使 Git 列表真正为空”的诊断。成功 job `6e58d4b5-1fe5-49b4-9dae-271761bf4b6a` / task `d76d5b78-6304-4e58-8c8e-9013f2e04dce`。
+- 模型先添加回归并运行固定验收，3 项特性检查失败；之后实现条件跳过空输入。第二次验收特性已全过，但全量测试出现模型新增测试的错误断言：notes.md 尚未删除时期待 ls-files 为空。修正为此时应出现 notes.md、删除后才为空，未改变产品验收标准。
+- 模型最终固定验收 8/8 PASS，397 passed / 5 skipped；宿主独立重跑同样通过，任务 SUCCEEDED。实际 endpoint 是 api.deepseek.com；真实 MySQL 操作记录与两个 RAG 结果均已只读复核。
+- 源码引用从 rag_sources.py:123-161 更新到 123-167；完整文件摘要分别为 `18bef6069d4d1773533bbc29762da24236b4eb0b5b27bec737a5b4ce590f1f49` 和 `7458cb908c5370dea624b1da16fe7b045f05f31a14916879fbcae32effcafe8f`，第二次 updated_files=1。片段正文与对应版本逐行吻合，operation 不同。
+- 修改仅限 rag_sources.py 与 test_rag.py。四类工件与 API 摘要一致；外部验收摘要保持原值。接入主项目时先只复制新增测试，旧实现 2 failed；再复制实现，RAG 26 passed，Ruff/mypy 通过。
+- 两轮尝试包含操作者审批、诊断引导与失败保留，不包装成零干预一轮成功。详细证据见 [LIVE_RAG_VERIFICATION.md](LIVE_RAG_VERIFICATION.md)。
+
+- 第二轮编写测试时曾出现恒真占位断言，模型在固定验收前自行删除，未进入最终补丁。最终两项新增测试已独立证明能让旧实现失败。
+- 最终任务完成后的第三次独立验证：8/8 PASS，397 passed / 5 skipped（68.02 秒），外部验收 SHA-256 仍为 `51d4c738c047d3a1e3a7e92f44b56b050f02623a65dc633e881537aaa5ab781a`。主项目全量回归 397 passed / 5 skipped、综合覆盖率 88.52%，warnings 当作错误。
+- 本轮专属 MySQL 测试没有 opt-in，但在线任务本身确实将事件和工具结果持久化到 MySQL；没有把候选测试的 skips 隐藏或改为通过。
