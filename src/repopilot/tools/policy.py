@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import cast
@@ -69,7 +69,7 @@ def change_scope_violation(
 class PolicyEngine:
     """Classify tool effects without trusting the model's description."""
 
-    _READ_ONLY = frozenset({"git_diff", "repo_map", "skill_read"})
+    _READ_ONLY = frozenset({"git_diff", "repo_map", "skill_read", "skill_list"})
     _PATH_TOOLS = frozenset({"read_file", "search"})
     _DENIED_EXECUTABLES = frozenset(
         {
@@ -99,6 +99,7 @@ class PolicyEngine:
         allowed_delegation_tools: Iterable[str] = (),
         allowed_paths: Iterable[str] = (),
         max_changed_files: int | None = None,
+        skill_write_preview: Callable[[ToolRequest], str] | None = None,
     ) -> None:
         self.worktree = worktree.resolve(strict=True)
         self.allowed_commands = frozenset(tuple(command) for command in allowed_commands)
@@ -106,8 +107,19 @@ class PolicyEngine:
         self.allowed_delegation_tools = frozenset(allowed_delegation_tools)
         self.allowed_paths = tuple(allowed_paths)
         self.max_changed_files = max_changed_files
+        self.skill_write_preview = skill_write_preview
 
     def decide(self, request: ToolRequest) -> PolicyDecision:
+        if request.name == "skill_write":
+            if self.skill_write_preview is None:
+                return self._decision(PolicyEffect.DENY, "skill writing is disabled", request)
+            try:
+                preview = self.skill_write_preview(request)
+            except (OSError, ValueError):
+                return self._decision(
+                    PolicyEffect.DENY, "invalid or changed skill write target", request
+                )
+            return self._decision(PolicyEffect.ASK, preview, request)
         if request.name in self.allowed_delegation_tools:
             return self._decision(PolicyEffect.ALLOW, "host-scoped read-only delegation", request)
         if request.name in self._READ_ONLY:
@@ -182,12 +194,17 @@ class PolicyEngine:
             return self._decision(
                 PolicyEffect.DENY, "destructive, shell, or network executable is denied", request
             )
-        if executable == "git" and len(argv) > 1 and argv[1] in {
-            "clean",
-            "push",
-            "reset",
-            "restore",
-        }:
+        if (
+            executable == "git"
+            and len(argv) > 1
+            and argv[1]
+            in {
+                "clean",
+                "push",
+                "reset",
+                "restore",
+            }
+        ):
             return self._decision(
                 PolicyEffect.DENY, "destructive Git subcommand is denied", request
             )

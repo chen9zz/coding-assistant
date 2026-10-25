@@ -22,7 +22,7 @@ from repopilot.tools.redaction import Redactor
 
 
 class AnalysisGateway:
-    ALLOWED = frozenset({"repo_map", "read_file", "search", "git_diff", "skill_read"})
+    ALLOWED = frozenset({"repo_map", "read_file", "search", "git_diff", "skill_read", "skill_list"})
 
     def __init__(self, registry: ToolRegistry, redactor: Redactor) -> None:
         self.registry = registry
@@ -51,7 +51,7 @@ class AnalysisGateway:
 
 def _analysis(manager: JobManager, job: dict[str, Any], spec: dict[str, Any]) -> str:
     from repopilot.configuration import load_config
-    from repopilot.tools.skills import SkillCatalog, SkillReadTool
+    from repopilot.tools.skills import SkillCatalog, SkillListTool, SkillReadTool
 
     registry = ToolRegistry()
     builtin = build_builtin_registry()
@@ -72,8 +72,9 @@ def _analysis(manager: JobManager, job: dict[str, Any], spec: dict[str, Any]) ->
     else:
         source = Path(spec["repository"])
         config = load_config(Path(spec["config"]))
-        skills = SkillCatalog(config.skills.roots)
+        skills = SkillCatalog(config.skills.roots, write_root=config.skills.write_root)
         registry.register(SkillReadTool(skills))
+        registry.register(SkillListTool(skills))
         runtime = HTTPRuntime(
             config.provider,
             tools=tool_catalog(registry),

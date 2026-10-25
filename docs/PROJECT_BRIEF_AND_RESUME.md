@@ -11,13 +11,13 @@ ForgePilot（原 RepoPilot-R）是有界、可审计的本地编程 Agent。新�
 Python · FastAPI · Textual · React/TypeScript · SQLAlchemy/MySQL · SQLite · MCP · Agent Skills
 
 - 实现统一控制面与持久化后台任务：TUI/网页共享提交、精确审批、协作取消和恢复入口，通过进程代次校验避免旧 worker 覆盖新任务状态。
-- 构建原生多模型工具调用、MCP 持久连接和 Skills 按需读取，支持独立上下文的只读后台子代理；以策略网关、子任务归属校验及预算限制控制工具权限。
+- 构建原生多模型工具调用、MCP 持久连接和 Skills 动态发现、分页加载与受控 Markdown 写入，支持独立上下文的只读后台子代理；以策略网关、子任务归属校验及预算限制控制工具权限。
 - 为 SQLite/MySQL 实现统一事件存储契约、事务操作声明和加密审批；以隔离 worktree、宿主测试复跑和补丁证据判定任务成功，配套自动化测试与真实仓库验收准备工具。
 
 **ForgePilot | Auditable multi-model coding agent | Personal project**
 
 - Built shared terminal/web task controls with persistent background workers, exact-operation approvals, cooperative cancellation and generation-safe recovery.
-- Integrated native model tool calling, persistent MCP connections, on-demand Skills, and bounded read-only analysis subagents with independent contexts.
+- Integrated native model tool calling, persistent MCP connections, on-demand Skills with per-write approval in a private directory, and bounded read-only analysis subagents with independent contexts.
 - Implemented SQLite/MySQL event-store adapters with transactional operation claims and encrypted approvals; enforced host-side verification and patch evidence in isolated Git worktrees.
 
 已完成真实 DeepSeek + 本机 MySQL 仓库任务：经八轮调试与检查点续修，32 项独立验收和 236 项候选仓库测试通过。2026-10-23 宿主全量回归为 339 passed、1 项 SQLite 专属 skip，综合覆盖率（含分支）87.97%，前端 11 项测试通过。发布前追加回归见 README 最新结果。

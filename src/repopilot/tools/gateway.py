@@ -56,6 +56,14 @@ class SafeToolGateway:
         if existing is not None:
             return self._replay(task_id, request, existing)
 
+        # A changed filesystem must not turn an unfinished intent into a policy
+        # denial. Reconcile uncertain effects before even evaluating a retry.
+        if any(
+            event.event_type == "tool.started" and event.operation_id == request.operation_id
+            for event in self.store.events(task_id)
+        ):
+            raise OperationInProgress("persisted intent has no result; outcome is indeterminate")
+
         started = time.monotonic()
         decision = self.policy.decide(request)
         if decision.effect is PolicyEffect.DENY:
@@ -111,6 +119,8 @@ class SafeToolGateway:
             result = self.registry.get(request.name).execute(
                 worktree, request, timeout_seconds=timeout_seconds
             )
+        except OperationInProgress:
+            raise
         except (OSError, RuntimeError, ToolNotFoundError, ValueError) as error:
             result = ToolResult(
                 operation_id=request.operation_id,
@@ -203,6 +213,11 @@ class SafeToolGateway:
                 "arguments": arguments,
                 "duration_ms": result.duration_ms,
                 "truncated": result.truncated,
+                **(
+                    {"approval_preview": result.error}
+                    if result.status is ToolStatus.APPROVAL_REQUIRED
+                    else {}
+                ),
             },
         )
 

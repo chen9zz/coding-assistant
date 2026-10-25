@@ -2,87 +2,139 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
-import stat
 from pathlib import Path
 from typing import Any, ClassVar
 
 import yaml
 
-from repopilot.domain.models import ToolRequest, ToolResult
+from repopilot.domain.models import JsonValue, ToolRequest, ToolResult
 from repopilot.tools.builtin import _failure, _success
 from repopilot.tools.policy import resolve_contained
+from repopilot.tools.skill_files import markdown_resource, private_root, read_relative
 
 _NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 _MAX_BYTES = 65_536
 
 
 def _read(root: Path, relative: str) -> str:
-    path = resolve_contained(root, relative)
-    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+    resolve_contained(root, relative)
+    return read_relative(root, relative)
+
+
+def validate_skill(name: str, text: str) -> str:
+    lines = text.splitlines()
+    if not lines or lines[0] != "---" or "---" not in lines[1:]:
+        raise ValueError("skill requires YAML frontmatter")
     try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise ValueError("skill resources must be regular files")
-        with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            data = stream.read(_MAX_BYTES + 1)
-        if len(data) > _MAX_BYTES:
-            raise ValueError("skill resource is too large (limit 65536 bytes)")
-        if b"\x00" in data:
-            raise ValueError("skill resource must be text")
-        return data.decode("utf-8")
-    finally:
-        os.close(descriptor)
+        metadata = yaml.safe_load("\n".join(lines[1 : lines.index("---", 1)]))
+    except yaml.YAMLError:
+        raise ValueError("skill has invalid YAML") from None
+    if not isinstance(metadata, dict):
+        raise ValueError("skill metadata must be a mapping")
+    description = metadata.get("description")
+    if (
+        len(name) > 64
+        or not _NAME.fullmatch(name)
+        or metadata.get("name") != name
+        or not isinstance(description, str)
+        or not 1 <= len(description.strip()) <= 1024
+    ):
+        raise ValueError("invalid skill name or description")
+    return description.strip()
 
 
 class SkillCatalog:
     """Only explicitly trusted roots are scanned; instructions never grant privileges."""
 
-    def __init__(self, roots: tuple[Path, ...]) -> None:
+    def __init__(self, roots: tuple[Path, ...], *, write_root: Path | None = None) -> None:
+        self.roots = roots
+        self.write_root = write_root
+        self.root_id: str | None = None
+        if write_root is not None:
+            fd, self.root_id = private_root(write_root)
+            os.close(fd)
+            if any(
+                write_root.is_relative_to(root.resolve())
+                or root.resolve().is_relative_to(write_root)
+                for root in roots
+            ):
+                raise ValueError("writable and read-only skill roots must not overlap")
+        self.refresh()
+
+    def refresh(self) -> None:
+        if self.write_root is not None:
+            fd, identity = private_root(self.write_root)
+            os.close(fd)
+            if identity != self.root_id:
+                raise ValueError("writable skill root identity changed")
         self._skills: dict[str, tuple[Path, str]] = {}
+        roots = self.roots + ((self.write_root,) if self.write_root else ())
         for root in roots:
-            root = root.resolve(strict=True)
+            root = root.absolute()
             for child in sorted(root.iterdir()):
                 if not (child / "SKILL.md").exists():
                     continue
                 if len(self._skills) >= 64:
                     raise ValueError("at most 64 skills can be configured")
-                folder = resolve_contained(root, child.name)
+                resolve_contained(root, child.name)
+                folder = root / child.name
                 text = _read(folder, "SKILL.md")
-                lines = text.splitlines()
-                if not lines or lines[0] != "---" or "---" not in lines[1:]:
-                    raise ValueError(f"skill {child.name} requires YAML frontmatter")
-                end = lines.index("---", 1)
-                try:
-                    metadata = yaml.safe_load("\n".join(lines[1:end]))
-                except yaml.YAMLError:
-                    raise ValueError(f"skill {child.name} has invalid YAML") from None
-                if not isinstance(metadata, dict):
-                    raise ValueError("skill metadata must be a mapping")
-                name, description = metadata.get("name"), metadata.get("description")
-                if (
-                    not isinstance(name, str)
-                    or len(name) > 64
-                    or not _NAME.fullmatch(name)
-                    or name != child.name
-                    or not isinstance(description, str)
-                    or not 1 <= len(description.strip()) <= 1024
-                ):
-                    raise ValueError(f"invalid name or description for skill {child.name}")
+                name = child.name
+                description = validate_skill(name, text)
                 if name in self._skills:
                     raise ValueError(f"duplicate skill name: {name}")
                 self._skills[name] = (folder, description.strip())
 
     def metadata(self) -> list[dict[str, str]]:
+        self.refresh()
         return [
             {"name": name, "description": description}
             for name, (_, description) in sorted(self._skills.items())
         ]
 
     def read(self, name: str, resource: str = "SKILL.md") -> str:
+        self.refresh()
         if name not in self._skills:
             raise ValueError("unknown skill name")
+        if self._skills[name][0].parent == self.write_root and not markdown_resource(resource):
+            raise ValueError("managed skills support Markdown resources only")
         return _read(self._skills[name][0], resource)
+
+    def writable(self, name: str) -> bool:
+        self.refresh()
+        return self.write_root is not None and (
+            name not in self._skills or self._skills[name][0].parent == self.write_root
+        )
+
+
+class SkillListTool:
+    name = "skill_list"
+    description = "Refresh skill metadata. Returns write root identity; never writes files."
+    input_schema: ClassVar[dict[str, Any]] = {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+
+    def __init__(self, catalog: SkillCatalog) -> None:
+        self.catalog = catalog
+
+    def execute(
+        self, worktree: Path, request: ToolRequest, *, timeout_seconds: float | None = None
+    ) -> ToolResult:
+        if request.arguments or (timeout_seconds is not None and timeout_seconds <= 0):
+            return _failure(request, "invalid arguments or task deadline exceeded")
+        try:
+            entries: list[JsonValue] = [
+                {**item, "writable": self.catalog.writable(item["name"])}
+                for item in self.catalog.metadata()
+            ]
+            return _success(request, {"skills": entries, "root_id": self.catalog.root_id})
+        except (OSError, ValueError):
+            return _failure(request, "skill directory is invalid or changed")
 
 
 class SkillReadTool:
@@ -133,6 +185,9 @@ class SkillReadTool:
                 "offset": offset,
                 "next_offset": end if end < len(content) else None,
                 "total_chars": len(content),
+                "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                "writable": self.catalog.writable(name),
+                "root_id": self.catalog.root_id,
             },
             truncated=end < len(content),
         )

@@ -17,13 +17,15 @@
 | --- | --- |
 | 模型接入 | 原生 HTTP 适配 OpenAI-compatible / Anthropic 协议，可配置 endpoint 与模型；已完成真实 DeepSeek 调用验证 |
 | 仓库上下文 | Tree-sitter 与 ripgrep，限制上下文体积；有界字节分页读取及独立二进制前缀检查 |
-| MCP 与 Skills | MCP SDK 2，stdio / Streamable HTTP、工具白名单；按需读取 SKILL.md 及引用资料 |
+| MCP 与 Skills | MCP SDK 2，stdio / Streamable HTTP、工具白名单；Skills 动态发现/分页加载；独立目录内创建、更新 Markdown，逐次精确审批 |
 | 后台执行 | 独立 worker、本地持久队列、恢复与取消；子代理仅做只读分析，不执行命令、不改文件、不递归派生 |
 | 权限与验收 | Git worktree、路径/命令检查、精确审批、步数/时限预算；宿主独立复跑验收 |
 | 持久化与回放 | MySQL / SQLite 保存任务、事件和操作结果，SQLite 保存后台队列；已提交结果可重放，结果不确定的副作用停止重试 |
 | 交互与证据 | React / SSE 展示状态、审批与工件；Textual TUI 连接同一服务；仅生成 PR 草稿，不自动推送 |
 
 ## 验证结果
+
+Skills 增量验证（2026-10-25）：后端 **370 passed / 5 skipped**，综合覆盖率 **88.31%**；前端 **12 tests**、类型检查及构建通过。故障恢复结果见 [Skills 功能说明](docs/SKILLS.md) 和 [排错记录](docs/DEBUG_JOURNAL.md)。此次未重新调用真实模型或启用真实 MySQL；以下保留此前在线发布验证的历史证据。
 
 2026-10-23（Pacific/Auckland），Python 3.13.13 / macOS arm64：
 
@@ -105,6 +107,8 @@ Demo 是固定脚本，不会根据输入自由编程，不代表真实模型表
 - [不依赖本机的云端部署方案与上线门槛](docs/CLOUD_DEPLOYMENT_PLAN.md)
 
 - [真实模型 API、MCP、Skills 与能力边界](docs/CONNECTED_ASSISTANT.md)
+- [Skills 创建、写入、加载与逐次审批](docs/SKILLS.md)
+- [Demo 仓库 RAG 设计（尚未实现）](docs/RAG_DESIGN.md)
 
 - [项目说明与架构](docs/PROJECT_GUIDE.md)
 - [重要代码逐行解析](docs/CODE_WALKTHROUGH.md)

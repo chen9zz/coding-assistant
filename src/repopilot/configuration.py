@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tomllib
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from repopilot.storage import StorageConfig
 
 class SkillsConfig(FrozenModel):
     roots: tuple[Path, ...] = ()
+    write_root: Path | None = None
 
 
 class AssistantConfig(FrozenModel):
@@ -42,6 +44,12 @@ def load_config(path: Path) -> AssistantConfig:
             "invalid configuration; check field names, endpoint and required values"
         ) from None
     roots = tuple((path.parent / root).resolve() for root in config.skills.roots)
+    # Preserve symlinks for descriptor-based rejection, do not resolve them away.
+    write_root = (
+        Path(os.path.abspath(path.parent / config.skills.write_root))
+        if config.skills.write_root is not None
+        else None
+    )
     storage = config.storage
     if storage.mysql is not None and storage.mysql.tls_ca is not None:
         mysql = storage.mysql.model_copy(
@@ -50,7 +58,7 @@ def load_config(path: Path) -> AssistantConfig:
         storage = storage.model_copy(update={"mysql": mysql})
     return config.model_copy(
         update={
-            "skills": config.skills.model_copy(update={"roots": roots}),
+            "skills": config.skills.model_copy(update={"roots": roots, "write_root": write_root}),
             "storage": storage,
         }
     )

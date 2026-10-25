@@ -10,7 +10,7 @@ Repo = repository，Pilot = 辅助驾驶代码仓库，R 对应原设计的 Reli
 | --- | --- | --- |
 | 模型驱动编程 | 原生 tool calls → 读文件/搜索/改补丁/运行测试 → 反馈 → 下一步 | CLI 任务式，类似 exec 工作流，不是完整交互式 TUI |
 | MCP | 官方 Python SDK 2；stdio、Streamable HTTP；初始化、分页发现、调用、关闭 | 显式工具白名单；支持 Bearer 环境变量；没有 OAuth/旧 SSE |
-| Skills | `*/SKILL.md` YAML 元数据；正文及引用按需加载 | 无自动脚本执行、无权限提升；目录须显式配置 |
+| Skills | YAML 元数据、动态列表、正文及引用分页加载；独立目录内创建/更新 Markdown | 写入默认关闭，逐次审批；只读根不变，无自动脚本执行、无权限提升 |
 | 其他模型 API | OpenAI-compatible Chat Completions；Anthropic Messages | 模型须支持工具调用；不代表所有厂商/模型模式均实测 |
 | 审批/恢复 | SQLite 检查点，精确请求审批后继续在线推理 | 不是跨任意配置、任意远端状态的事务恢复 |
 | 结果 | 独立 Git worktree，真实测试验收，自动输出四件套 | 必须产生非空 patch；纯问答/只读审查不是此任务工作流 |
@@ -79,6 +79,8 @@ MCP 服务是可信外部执行边界，不受本地 worktree 文件约束。允
 
 ## Skills：元数据 → 正文 → 引用
 
+2026-10-25 增量：新增 `skill_list`、可选 `skills.write_root` 和逐次审批的 `skill_write`。配置、目录约束及恢复行为见 [Skills 创建与写入](SKILLS.md)。下文 `skills.roots` 的手动安装方式仍只读。
+
 创建目录结构：`my-skills/regression-repair/SKILL.md`，正文示例：
 
 ```markdown
@@ -93,7 +95,7 @@ description: 修复回归缺陷时使用，先构造失败测试，再修改实�
 
 配置 `skills.roots=["/absolute/path/to/my-skills"]`。相对目录按配置文件所在位置解释，不按当前 shell 位置解释。模型启动时仅收到 name/description；决定采用后调用 `skill_read(name="regression-repair")`，读取引用时增加 `resource="references/guide.md"`。不会把整个技能库塞进系统提示词。
 
-最多 64 个技能，每个资源最多 65536 字节。工具每页返回最多 8000 字符；若 `next_offset` 非空，继续传入该 `offset`，直到读完。名称须与目录一致，重复名称、越界路径、越界符号链接及非普通文本文件会拒绝。`allowed-tools` 只作为技能文档内容，不改变宿主权限。脚本可被阅读，但不会因为出现在 Skill 中就自动执行。
+最多 64 个技能，每个资源最多 65536 字节。工具每页返回最多 8000 字符；若 `next_offset` 非空，继续传入该 `offset`，直到读完。名称须与目录一致，重复名称、越界路径、越界符号链接及非普通文本文件会拒绝。`allowed-tools` 只作为技能文档内容，不改变宿主权限。旧只读 roots 的文本脚本仍可被阅读，但不会自动执行；新受控 write_root 仅允许 SKILL.md 和 references/*.md。
 
 任务历史默认上限 128000 字符，可通过 `--context-chars` 调整（24000–1000000）。这不是 token 数，也不含额外系统提示和工具 Schema，需根据模型窗口及费用设置。旧工具结果按成对历史压缩；超大单个请求仍会安全失败。MCP 结果同时保留文本和结构化字段，超过 12000 字符时返回显式截断的预览，模型应改用更窄查询或远端分页。
 

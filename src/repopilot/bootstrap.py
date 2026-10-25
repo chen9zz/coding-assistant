@@ -9,7 +9,7 @@ from pathlib import Path
 
 from repopilot.application.orchestrator import DurableTaskOrchestrator
 from repopilot.application.service import TaskApplicationService
-from repopilot.domain.models import TaskSpec
+from repopilot.domain.models import TaskSpec, ToolRequest
 from repopilot.domain.ports import EventStore
 from repopilot.infrastructure.artifacts import ArtifactBundleWriter
 from repopilot.infrastructure.git import GitWorktreeManager
@@ -38,6 +38,8 @@ def build_local_container(
     secret_values: set[str] | None = None,
     store: EventStore | None = None,
     cancelled: Callable[[], bool] | None = None,
+    skill_write_preview: Callable[[ToolRequest], str] | None = None,
+    skill_write_root: Path | None = None,
 ) -> LocalContainer:
     resolved_root = root.resolve(strict=False)
     resolved_root.mkdir(parents=True, exist_ok=True)
@@ -51,6 +53,12 @@ def build_local_container(
     redactor = Redactor(secrets=secrets)
 
     def gateway_factory(worktree: Path, spec: TaskSpec) -> SafeToolGateway:
+        if skill_write_root is not None:
+            for boundary in (worktree.resolve(), spec.repository.resolve()):
+                if skill_write_root.is_relative_to(boundary) or boundary.is_relative_to(
+                    skill_write_root
+                ):
+                    raise ValueError("writable skills and repository/worktree must not overlap")
         return SafeToolGateway(
             store=store,
             registry=registry or build_builtin_registry(),
@@ -61,6 +69,7 @@ def build_local_container(
                 allowed_delegation_tools=allowed_delegation_tools,
                 allowed_paths=spec.allowed_paths,
                 max_changed_files=spec.max_changed_files,
+                skill_write_preview=skill_write_preview,
             ),
             redactor=redactor,
         )

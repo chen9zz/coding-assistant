@@ -9,8 +9,8 @@ class EventStream {
   constructor() { EventStream.latest = this; }
   addEventListener(type: string, callback: (event: MessageEvent) => void) { this.callbacks.set(type, callback); }
   close() {}
-  emit(type: string, operationId: string, sequence: number) {
-    const payload = type.startsWith("task.") ? { operation_id: operationId } : { operation_id: operationId, tool_name: "run_command", reason: "Verify tests" };
+  emit(type: string, operationId: string, sequence: number, extra: Record<string, unknown> = {}) {
+    const payload = { ...(type.startsWith("task.") ? { operation_id: operationId } : { operation_id: operationId, tool_name: "run_command", reason: "Verify tests" }), ...extra };
     this.callbacks.get(type)?.(new MessageEvent(type, { data: JSON.stringify({ event_id: `e${sequence}`, task_id: "task-1", event_type: type, operation_id: type.startsWith("task.") ? null : operationId, sequence, from_state: "EXECUTING", to_state: "WAITING_APPROVAL", payload, timestamp: "2026-10-22T00:00:00Z", schema_version: 1 }) }));
   }
 }
@@ -62,6 +62,21 @@ it("only approves the outstanding exact operation from task events", async () =>
   fireEvent.click(await screen.findByRole("button", { name: "Approve operation verify-exact-2" }));
   await waitFor(() => expect(writes).toEqual([{ path: "/v1/jobs/job-1/approve", body: { operation_id: "verify-exact-2" }, token: "csrf-exact" }]));
   expect(screen.queryByRole("button", { name: "Approve operation verify-exact-2" })).not.toBeInTheDocument();
+});
+
+it("shows a plain-text skill diff before approving its exact write", async () => {
+  job.state = "WAITING_APPROVAL";
+  render(<Workbench />);
+  await screen.findByRole("heading", { name: "Fix validation" });
+  const preview = "Approve skill write: /managed/repair/SKILL.md\n-old\n+<script>not executable</script>\n";
+  act(() => {
+    EventStream.latest.emit("tool.approval_requested", "skill-1", 1, { tool_name: "skill_write", approval_preview: preview });
+    EventStream.latest.emit("task.approval_requested", "skill-1", 2);
+  });
+  expect(screen.getByLabelText("Approval preview").textContent).toBe(preview);
+  expect(writes).toEqual([]);
+  fireEvent.click(screen.getByRole("button", { name: "Approve operation skill-1" }));
+  await waitFor(() => expect(writes).toEqual([{ path: "/v1/jobs/job-1/approve", body: { operation_id: "skill-1" }, token: "csrf-exact" }]));
 });
 
 it("resumes an interrupted task and renders artifact content with its truncation notice", async () => {
