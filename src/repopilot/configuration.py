@@ -19,10 +19,15 @@ class SkillsConfig(FrozenModel):
     write_root: Path | None = None
 
 
+class RagConfig(FrozenModel):
+    enabled: bool = False
+
+
 class AssistantConfig(FrozenModel):
     provider: ProviderConfig
     storage: StorageConfig = Field(default_factory=StorageConfig)
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
+    rag: RagConfig = Field(default_factory=RagConfig)
     mcp_servers: tuple[MCPServerConfig, ...] = ()
 
     @model_validator(mode="after")

@@ -40,6 +40,7 @@ def build_local_container(
     cancelled: Callable[[], bool] | None = None,
     skill_write_preview: Callable[[ToolRequest], str] | None = None,
     skill_write_root: Path | None = None,
+    rag_cache_root: Path | None = None,
 ) -> LocalContainer:
     resolved_root = root.resolve(strict=False)
     resolved_root.mkdir(parents=True, exist_ok=True)
@@ -53,6 +54,12 @@ def build_local_container(
     redactor = Redactor(secrets=secrets)
 
     def gateway_factory(worktree: Path, spec: TaskSpec) -> SafeToolGateway:
+        if rag_cache_root is not None:
+            for boundary in (worktree.resolve(), spec.repository.resolve()):
+                if rag_cache_root.is_relative_to(boundary) or boundary.is_relative_to(
+                    rag_cache_root
+                ):
+                    raise ValueError("RAG cache and repository/worktree must not overlap")
         if skill_write_root is not None:
             for boundary in (worktree.resolve(), spec.repository.resolve()):
                 if skill_write_root.is_relative_to(boundary) or boundary.is_relative_to(

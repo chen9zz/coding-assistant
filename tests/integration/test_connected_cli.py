@@ -16,7 +16,7 @@ from repopilot.cli import app
 from repopilot.evaluation.cases import load_builtin_cases
 
 
-@pytest.mark.parametrize("mode", ["basic", "mcp", "approval", "large_read"])
+@pytest.mark.parametrize("mode", ["basic", "mcp", "approval", "large_read", "rag"])
 def test_online_cli_uses_skill_native_tools_and_produces_verified_patch(
     tmp_path: Path, mode: str
 ) -> None:
@@ -41,6 +41,13 @@ def test_online_cli_uses_skill_native_tools_and_produces_verified_patch(
         ("apply_patch", case.actions[0].arguments),
         (None, {}),
     ]
+    if mode == "rag":
+        replies = [
+            ("rag_search", {"query": "parse_port"}),
+            ("apply_patch", case.actions[0].arguments),
+            ("rag_search", {"query": "parse_port"}),
+            (None, {}),
+        ]
     if mode == "mcp":
         replies.insert(2, ("$mcp", {"value": "coding context"}))
     if mode == "approval":
@@ -97,6 +104,8 @@ def test_online_cli_uses_skill_native_tools_and_produces_verified_patch(
         f'base_url="http://127.0.0.1:{server.server_port}/v1"\n'
         '[skills]\nroots=["skills"]\n'
     )
+    if mode == "rag":
+        config.write_text(config.read_text() + "\n[rag]\nenabled=true\n")
     if mode == "mcp":
         fixture = Path(__file__).parents[1] / "fixtures" / "mcp_server.py"
         config.write_text(
@@ -168,7 +177,8 @@ def test_online_cli_uses_skill_native_tools_and_produces_verified_patch(
     assert catalog["apply_patch"]["parameters"]["required"] == ["patch"]
     assert "skill_read" in catalog
     assert "Inspect before patching" not in json.dumps(requests[0])
-    assert "Inspect before patching" in json.dumps(requests[1])
+    if mode != "rag":
+        assert "Inspect before patching" in json.dumps(requests[1])
     assert "test_command" in json.dumps(requests[0])
     artifacts = CliRunner().invoke(
         app,
@@ -180,12 +190,27 @@ def test_online_cli_uses_skill_native_tools_and_produces_verified_patch(
             "--json",
         ],
     )
-    assert "skill_read" in artifacts.stdout
+    assert ("rag_search" if mode == "rag" else "skill_read") in artifacts.stdout
     if mode == "mcp":
         assert "coding context" in json.dumps(requests[-1])
         mcp_tools = [t for t in catalog if t.startswith("mcp__")]
         assert len(mcp_tools) == 1
         assert "mcp__" in artifacts.stdout
+
+    if mode == "rag":
+        trajectory = (bundle / "trajectory.jsonl").read_text()
+        assert "rag_search" in catalog
+        assert "rag_search" in trajectory
+        from repopilot.infrastructure.sqlite import SQLiteEventStore
+
+        history = SQLiteEventStore(tmp_path / "runtime/state.db").operation_history(task["task_id"])
+        evidence = [out.output for req, out in history if req.name == "rag_search"]
+        assert len(evidence) == 2
+        before = next(hit for hit in evidence[0]["hits"] if hit["path"] == "config.py")
+        after = next(hit for hit in evidence[1]["hits"] if hit["path"] == "config.py")
+        assert before["sha256"] != after["sha256"]
+        assert after["citation"].startswith("config.py:")
+        assert evidence[1]["updated_files"] == 1
 
 
 def test_check_config_discovers_without_contacting_model(tmp_path: Path) -> None:

@@ -8,9 +8,10 @@ ForgePilot（原 RepoPilot-R）是有界、可审计的本地编程 Agent。新�
 
 **ForgePilot｜可审计的多模型编程 Agent｜个人项目**
 
-Python · FastAPI · Textual · React/TypeScript · SQLAlchemy/MySQL · SQLite · MCP · Agent Skills
+Python · FastAPI · Textual · React/TypeScript · SQLAlchemy/MySQL · SQLite FTS5/BM25 · Tree-sitter · MCP · Agent Skills
 
 - 实现统一控制面与持久化后台任务：TUI/网页共享提交、精确审批、协作取消和恢复入口，通过进程代次校验避免旧 worker 覆盖新任务状态。
+- 实现仓库词法 RAG：Tree-sitter/Markdown 分块、SQLite FTS5/BM25 排序及文件摘要驱动的增量同步，返回路径/行号引用；不宣称向量检索或未经测量的召回率。
 - 构建原生多模型工具调用、MCP 持久连接和 Skills 动态发现、分页加载与受控 Markdown 写入，支持独立上下文的只读后台子代理；以策略网关、子任务归属校验及预算限制控制工具权限。
 - 为 SQLite/MySQL 实现统一事件存储契约、事务操作声明和加密审批；以隔离 worktree、宿主测试复跑和补丁证据判定任务成功，配套自动化测试与真实仓库验收准备工具。
 

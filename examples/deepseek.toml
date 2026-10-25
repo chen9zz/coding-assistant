@@ -22,3 +22,7 @@ roots = [] # Example: ["/absolute/path/to/your/skills"]
 # args = ["/absolute/path/to/trusted_server.py"]
 # allow_tools = ["search_docs"]
 # env = { DOCS_TOKEN = "MY_DOCS_TOKEN" }
+
+# Optional repository retrieval; index stays in the private runtime/rag cache.
+[rag]
+enabled = false # Set true to enable FTS5/BM25 retrieval with source citations.

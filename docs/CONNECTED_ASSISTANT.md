@@ -10,6 +10,7 @@ Repo = repository，Pilot = 辅助驾驶代码仓库，R 对应原设计的 Reli
 | --- | --- | --- |
 | 模型驱动编程 | 原生 tool calls → 读文件/搜索/改补丁/运行测试 → 反馈 → 下一步 | CLI 任务式，类似 exec 工作流，不是完整交互式 TUI |
 | MCP | 官方 Python SDK 2；stdio、Streamable HTTP；初始化、分页发现、调用、关闭 | 显式工具白名单；支持 Bearer 环境变量；没有 OAuth/旧 SSE |
+| 仓库 RAG | 可选 SQLite FTS5/BM25，增量索引和来源引用 | `[rag] enabled=true`；私有缓存、受限源文件、逐次核对摘要；见 [RAG](RAG.md) |
 | Skills | YAML 元数据、动态列表、正文及引用分页加载；独立目录内创建/更新 Markdown | 写入默认关闭，逐次审批；只读根不变，无自动脚本执行、无权限提升 |
 | 其他模型 API | OpenAI-compatible Chat Completions；Anthropic Messages | 模型须支持工具调用；不代表所有厂商/模型模式均实测 |
 | 审批/恢复 | SQLite 检查点，精确请求审批后继续在线推理 | 不是跨任意配置、任意远端状态的事务恢复 |

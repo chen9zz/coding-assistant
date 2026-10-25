@@ -69,7 +69,7 @@ def change_scope_violation(
 class PolicyEngine:
     """Classify tool effects without trusting the model's description."""
 
-    _READ_ONLY = frozenset({"git_diff", "repo_map", "skill_read", "skill_list"})
+    _READ_ONLY = frozenset({"git_diff", "repo_map", "skill_read", "skill_list", "rag_search"})
     _PATH_TOOLS = frozenset({"read_file", "search"})
     _DENIED_EXECUTABLES = frozenset(
         {
