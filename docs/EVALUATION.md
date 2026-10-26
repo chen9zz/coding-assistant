@@ -1,4 +1,6 @@
-# RepoPilot-R 评估口径与可复现结果
+# ForgePilot 评估口径与可复现结果
+
+当前新增模块见 [Agent / RAG 对照评估](PAIRED_EVALUATION.md)。下文是历史离线快照，不代表当前测试总数。
 
 ## 已验证快照
 

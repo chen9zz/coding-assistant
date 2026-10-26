@@ -175,6 +175,46 @@ def evaluation_command(
     _emit(_report_payload(report, workspace.resolve()), json_output)
 
 
+@app.command("eval-compare")
+def compare_command(
+    workspace: Annotated[Path, typer.Option("--workspace")],
+    config: Annotated[Path | None, typer.Option("--config", exists=True)] = None,
+    repetitions: Annotated[int, typer.Option("--repetitions", min=1, max=3)] = 1,
+) -> None:
+    """Compare RAG on/off on built-in trusted fixtures; --config makes paid model calls."""
+    from repopilot.configuration import load_config
+    from repopilot.evaluation.paired import run_comparison
+
+    try:
+        provider = load_config(config).provider if config else None
+        report = run_comparison(workspace, provider=provider, repetitions=repetitions)
+    except (ValueError, OSError):
+        typer.echo("Cannot start evaluation: check config and use a new workspace directory.")
+        raise typer.Exit(2) from None
+    typer.echo(json.dumps({"mode": report["mode"], "summary": report["summary"]}, indent=2))
+    typer.echo(f"Reports: {workspace.absolute() / 'report.json'}")
+
+
+@app.command("eval-note")
+def evaluation_note_command(
+    workspace: Annotated[Path, typer.Option("--workspace", exists=True)],
+    attempt: Annotated[str, typer.Option("--attempt")],
+    kind: Annotated[str, typer.Option("--kind")],
+    note: Annotated[str, typer.Option("--note")],
+) -> None:
+    """Record an operator observation, without approving or resuming a task."""
+    from repopilot.evaluation.paired import add_note
+
+    if kind not in {"diagnosis", "approval", "cancellation"}:
+        raise typer.BadParameter("kind must be diagnosis, approval or cancellation")
+    try:
+        add_note(workspace, attempt, kind, note)
+    except (ValueError, OSError):
+        typer.echo("Cannot append note: check completed report, attempt and note length.")
+        raise typer.Exit(2) from None
+    typer.echo("Operator observation recorded; original outcome unchanged.")
+
+
 @app.command("run")
 def run_command(
     repository: Annotated[Path, typer.Option("--repo", exists=True, file_okay=False)],

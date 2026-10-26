@@ -55,3 +55,7 @@ enabled = true
 测试使用真实临时 Git 仓库和 SQLite FTS5，覆盖引用、更新/删除/重启、中文/短查询、忽略与敏感内容、源和缓存链接、字节/数量/时间限制、并发锁、FTS5 缺失和检索期间变动。本地 HTTP 合约测试驱动完整编程链路，确认补丁前后检索摘要不同且宿主验收通过；该自动化测试不调用真实 DeepSeek。另已完成真实 DeepSeek + MySQL 仓库任务，8/8 验收及候选全量回归通过，详见 [真实 RAG 验收](LIVE_RAG_VERIFICATION.md)。
 
 当前证明功能与安全边界，不报告未经测量的 Recall@5、MRR、真实模型修复率或费用收益。20–30 题检索质量基准、对比 ripgrep 以及后续 embedding 仍是 [后续评估计划](RAG_DESIGN.md)。排错过程继续记录于 [DEBUG_JOURNAL.md](DEBUG_JOURNAL.md)。
+
+## 开关对照
+
+已新增[Demo 对照评估](PAIRED_EVALUATION.md)：24 道内置微型题和 3 个脚本修复任务。它不是先前计划中的真实仓库质量题集；小样本结果未观察到 RAG 命中收益，真实模型对照仍需显式运行。

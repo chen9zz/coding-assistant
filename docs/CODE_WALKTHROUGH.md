@@ -205,15 +205,15 @@
 
 ## 15. 评估器：用隐藏测试和 Git 事实评分
 
-范围：`src/repopilot/evaluation/runner.py:35-159`
+范围：`src/repopilot/evaluation/runner.py:35-156`
 
 - 35—44 行要求新工作区，逐 case 执行并落盘 JSON/Markdown。
-- 46—69 行创建真实仓库；故障 case 在指定操作后中断，重建 service 再 resume。
-- 71—72 行为每个成功任务生成四件套，所以 demo 不是只打印汇总数字。
-- 74—82 行先用生产同款 `GitDiffTool` 固化 Agent 完成时的完整 patch，避免随后注入的隐藏测试被误算成 Agent 改动。
-- 83—101 行再安装并独立运行隐藏测试，从结构化差异结果取得文件名并精确匹配期望范围。
-- 102—120 行要求终态、完整差异、隐藏测试和范围同时成功，并记录 patch 哈希、策略违规、审计工具事件、恢复与耗时。
-- 123—159 行重建 service 时复用同一 SQLite/worktree，把 fixture 的精确改动路径和文件数接入宿主策略，并接入证据 writer。
+- 46—70 行创建真实仓库；故障 case 在指定操作后中断，重建 service 再 resume。
+- 72—83 行生成证据，并在隐藏测试安装前固化 Agent 的完整改动。
+- 84—118 行调用独立隐藏验收器，结合终态、完整差异、隐藏测试与精确路径范围评分，记录补丁摘要、恢复和耗时。
+- 120—156 行复用生产策略构造服务，精确限制允许命令、改动路径和文件数。
+
+新增 `evaluation/verification.py` 要求预期隐藏测试在 JUnit 中实际完成；零退出码本身不构成通过。`evaluation/paired.py` 提供 RAG 开关实验、完整失败分母与事后人工备注，`evaluation/retrieval.py` 对真实词法工具评分，详细口径见 [对照评估](PAIRED_EVALUATION.md)。
 
 ## 16. 在线模型和 MCP 都只是适配器
 

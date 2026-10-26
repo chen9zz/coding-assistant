@@ -61,7 +61,9 @@ class FixtureCase(FrozenModel):
         installed: list[Path] = []
         for source in sorted((self.root / "hidden").glob("*.py")):
             target = worktree / source.name
-            shutil.copy2(source, target)
+            # Exclusive creation refuses candidate-controlled files and links.
+            with target.open("xb") as output:
+                output.write(source.read_bytes())
             installed.append(target)
         return tuple(installed)
 

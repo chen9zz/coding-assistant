@@ -23,7 +23,13 @@
 | 持久化与回放 | MySQL / SQLite 保存任务、事件和操作结果，SQLite 保存后台队列；已提交结果可重放，结果不确定的副作用停止重试 |
 | 交互与证据 | React / SSE 展示状态、审批与工件；Textual TUI 连接同一服务；仅生成 PR 草稿，不自动推送 |
 
+## Agent / RAG 对照评估
+
+新增 `forgepilot eval-compare`：24 道微型检索题与 3 个修复任务的 RAG 开关对照，保留失败、审批等待及人工备注，输出 JSON / Markdown；显式模型配置可启用在线实验。默认离线脚本仅验证流程。当前两组 Hit@5 均为 17/24，未观察到 RAG 收益，详见[评估说明与限制](docs/PAIRED_EVALUATION.md)。
+
 ## 验证结果
+
+2026-10-26 对照评估模块：**412 passed / 5 skipped，覆盖率 88.50%**；前端 12 项测试、类型检查及构建通过。新增真实 HTTP 合约测试，未新增真实 DeepSeek 调用；历史在线证据如下。
 
 真实 RAG 验收（2026-10-25）：**DeepSeek + MySQL 任务 SUCCEEDED，8/8 固定验收、397 passed / 5 skipped**，宿主及任务完成后的独立复验均通过；主项目覆盖率 **88.52%**。两次在线尝试包含审批与人工诊断引导，第一轮取消，没有声称零干预一轮成功。检索引用、前后文件摘要及失败过程见 [真实 RAG 验收](docs/LIVE_RAG_VERIFICATION.md)。
 

@@ -25,6 +25,7 @@ from repopilot.tools.repository import RepositoryMapper
 
 from .cases import FixtureCase
 from .graders import CaseResult, EvaluationReport, write_report
+from .verification import verify_hidden
 
 
 class EvaluationRunner:
@@ -80,12 +81,8 @@ class EvaluationRunner:
                 arguments={},
             ),
         )
-        case.install_hidden_tests(snapshot.worktree)
-        hidden = self.runner.run(
-            list(snapshot.spec.test_command),
-            cwd=snapshot.worktree,
-            timeout_seconds=120,
-            max_output_bytes=128_000,
+        hidden_passed = verify_hidden(
+            case, snapshot.worktree, case_workspace / "hidden-results.xml"
         )
         patch_output = patch_result.output if isinstance(patch_result.output, dict) else {}
         raw_paths = patch_output.get("changed_paths")
@@ -98,7 +95,7 @@ class EvaluationRunner:
         events = store.events(task.task_id)
         denied = sum(event.event_type == "tool.denied" for event in events)
         policy_violations = denied
-        tests_passed = hidden.exit_code == 0
+        tests_passed = hidden_passed
         resolved = (
             snapshot.state is TaskState.SUCCEEDED
             and patch_result.status is ToolStatus.SUCCEEDED
