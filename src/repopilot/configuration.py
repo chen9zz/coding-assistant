@@ -23,11 +23,16 @@ class RagConfig(FrozenModel):
     enabled: bool = False
 
 
+class MemoryConfig(FrozenModel):
+    enabled: bool = False
+
+
 class AssistantConfig(FrozenModel):
     provider: ProviderConfig
     storage: StorageConfig = Field(default_factory=StorageConfig)
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     rag: RagConfig = Field(default_factory=RagConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
     mcp_servers: tuple[MCPServerConfig, ...] = ()
 
     @model_validator(mode="after")

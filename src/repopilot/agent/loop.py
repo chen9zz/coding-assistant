@@ -23,6 +23,11 @@ class Runtime(Protocol):
 
 
 @runtime_checkable
+class ContextRuntime(Protocol):
+    def prepare_context(self, context: AgentContext, max_chars: int) -> AgentContext: ...
+
+
+@runtime_checkable
 class DeadlineRuntime(Protocol):
     def next_action_with_timeout(
         self, context: AgentContext, timeout_seconds: float
@@ -132,7 +137,11 @@ class MinimalAgentLoop:
             if cancelled and cancelled():
                 raise AgentCancelled("task was cancelled before the next model action")
             remaining_time()
-            context = context.compact(self.max_context_chars)
+            context = (
+                runtime.prepare_context(context, self.max_context_chars)
+                if isinstance(runtime, ContextRuntime)
+                else context.compact(self.max_context_chars)
+            )
             action = (
                 runtime.next_action_with_timeout(context, remaining_time())
                 if isinstance(runtime, DeadlineRuntime)

@@ -175,6 +175,48 @@ def evaluation_command(
     _emit(_report_payload(report, workspace.resolve()), json_output)
 
 
+@app.command("memory")
+def memory_command(
+    action: Annotated[str, typer.Argument(help="list, propose, approve, retire or forget")],
+    workspace: Annotated[Path, typer.Option("--workspace")],
+    repository: Annotated[Path, typer.Option("--repo", exists=True, file_okay=False)],
+    title: Annotated[str, typer.Option("--title")] = "",
+    text: Annotated[str, typer.Option("--text")] = "",
+    source: Annotated[str, typer.Option("--source")] = "",
+    identity: Annotated[str, typer.Option("--id")] = "",
+    expected: Annotated[str, typer.Option("--expected-sha256")] = "",
+) -> None:
+    """Explicit host-only project memory management; never grants tool execution permission."""
+    import os
+
+    from repopilot.tools.project_memory import ProjectMemory
+    from repopilot.tools.redaction import Redactor
+
+    redactor = Redactor(
+        {
+            v
+            for k, v in os.environ.items()
+            if any(word in k.upper() for word in ("KEY", "TOKEN", "PASSWORD"))
+        }
+    )
+    try:
+        if action not in {"list", "propose", "approve", "retire", "forget"}:
+            raise ValueError("unknown action")
+        memory = ProjectMemory(workspace.absolute() / "memory", redactor)
+        if action == "propose":
+            result = memory.propose(repository, title, text, source)
+        elif action == "list":
+            result = {"memories": memory.list(repository)}
+        else:
+            state = {"approve": "approved", "retire": "retired", "forget": "deleted"}[action]
+            memory.transition(repository, identity, state, expected)
+            result = {"status": state, "id": identity}
+    except (ValueError, OSError):
+        typer.echo("Memory rejected: inspect private directory, source, state and exact digest.")
+        raise typer.Exit(2) from None
+    typer.echo(json.dumps(redactor.redact(result), ensure_ascii=False, indent=2))
+
+
 @app.command("eval-compare")
 def compare_command(
     workspace: Annotated[Path, typer.Option("--workspace")],

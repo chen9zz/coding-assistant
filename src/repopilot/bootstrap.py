@@ -15,8 +15,10 @@ from repopilot.infrastructure.artifacts import ArtifactBundleWriter
 from repopilot.infrastructure.git import GitWorktreeManager
 from repopilot.infrastructure.sqlite import SQLiteEventStore
 from repopilot.tools.builtin import ToolRegistry, build_builtin_registry
+from repopilot.tools.context_memory import ContextReadTool, MemorySearchTool
 from repopilot.tools.gateway import SafeToolGateway
 from repopilot.tools.policy import PolicyEngine
+from repopilot.tools.project_memory import ProjectMemory
 from repopilot.tools.redaction import Redactor
 from repopilot.tools.repository import RepositoryMapper
 
@@ -41,6 +43,7 @@ def build_local_container(
     skill_write_preview: Callable[[ToolRequest], str] | None = None,
     skill_write_root: Path | None = None,
     rag_cache_root: Path | None = None,
+    memory_enabled: bool = False,
 ) -> LocalContainer:
     resolved_root = root.resolve(strict=False)
     resolved_root.mkdir(parents=True, exist_ok=True)
@@ -52,6 +55,12 @@ def build_local_container(
     }
     secrets.update(secret_values or set())
     redactor = Redactor(secrets=secrets)
+    actual_registry = registry or build_builtin_registry()
+    actual_registry.register(ContextReadTool(store))
+    if memory_enabled:
+        actual_registry.register(
+            MemorySearchTool(ProjectMemory(resolved_root / "memory", redactor), store)
+        )
 
     def gateway_factory(worktree: Path, spec: TaskSpec) -> SafeToolGateway:
         if rag_cache_root is not None:
@@ -68,7 +77,7 @@ def build_local_container(
                     raise ValueError("writable skills and repository/worktree must not overlap")
         return SafeToolGateway(
             store=store,
-            registry=registry or build_builtin_registry(),
+            registry=actual_registry,
             policy=PolicyEngine(
                 worktree,
                 allowed_commands={spec.test_command},

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import hashlib
 from enum import StrEnum
+from typing import Any
 
 from pydantic import Field, model_validator
 
-from repopilot.domain.models import FrozenModel, JsonValue, ToolRequest, ToolResult
+from repopilot.domain.models import FrozenModel, JsonValue, ToolRequest, ToolResult, ToolStatus
 
 
 class ActionKind(StrEnum):
@@ -115,18 +116,54 @@ class AgentContext(FrozenModel):
             return candidate
         raise ContextBudgetExceeded("paired context metadata exceeds the configured budget")
 
+    def checkpoint(self) -> dict[str, Any]:
+        """Bounded host facts reconstructed from durable history, never model assertions."""
+        return {
+            "untrusted_evidence": True,
+            "historical_only": True,
+            "operation_count": len(self.exchanges),
+            "failed_operations": [
+                e.request.operation_id
+                for e in self.exchanges
+                if e.result.status in {ToolStatus.FAILED, ToolStatus.DENIED}
+            ][-8:],
+            "approval_operations": [
+                e.request.operation_id
+                for e in self.exchanges
+                if e.result.status is ToolStatus.APPROVAL_REQUIRED
+            ][-8:],
+            "successful_patch_operations": [
+                e.request.operation_id
+                for e in self.exchanges
+                if e.request.name == "apply_patch" and e.result.status is ToolStatus.SUCCEEDED
+            ][-8:],
+            "recent_operations": [
+                {
+                    "id": e.request.operation_id,
+                    "tool": e.request.name,
+                    "status": e.result.status.value,
+                }
+                for e in self.exchanges[-4:]
+            ],
+        }
+
     @staticmethod
     def _compacted_exchange(exchange: ToolExchange, *, include_preview: bool) -> ToolExchange:
         serialized = exchange.result.model_dump_json()
+        if exchange.compacted and isinstance(exchange.result.output, dict):
+            previous = dict(exchange.result.output)
+            if not include_preview:
+                previous.pop("preview", None)
+            return exchange.model_copy(
+                update={"result": exchange.result.model_copy(update={"output": previous})}
+            )
         summary: dict[str, JsonValue] = {
             "compacted": True,
             "original_sha256": hashlib.sha256(serialized.encode()).hexdigest(),
         }
         if include_preview:
             summary["preview"] = serialized[:120]
-        result = exchange.result.model_copy(
-            update={"output": summary, "truncated": True}
-        )
+        result = exchange.result.model_copy(update={"output": summary, "truncated": True})
         return exchange.model_copy(update={"result": result, "compacted": True})
 
 

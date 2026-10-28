@@ -163,6 +163,25 @@ class HTTPRuntime:
         self.instructions = "\n\n".join(part for part in (_INSTRUCTIONS, instructions) if part)
         self._opener = build_opener(_NoRedirects())
 
+    def prepare_context(self, context: AgentContext, max_chars: int) -> AgentContext:
+        """Bound the actual serialized request, including instructions and tool schemas.
+
+        Character accounting is intentionally not advertised as tokenizer accounting.
+        Keep tool request/result identities intact; fail closed if metadata cannot fit.
+        """
+        from repopilot.agent.actions import ContextBudgetExceeded
+
+        candidate = context.compact(max_chars)
+        for _ in range(3):
+            size = len(json.dumps(self._payload(candidate), ensure_ascii=False, allow_nan=False))
+            if size <= max_chars:
+                return candidate
+            allowance = len(candidate.model_dump_json()) - (size - max_chars) - 64
+            if allowance < 256:
+                break
+            candidate = candidate.compact(allowance)
+        raise ContextBudgetExceeded("full model request exceeds character budget")
+
     def next_action(self, context: AgentContext) -> AgentAction:
         return self.next_action_with_timeout(context, self.config.timeout_seconds)
 
@@ -238,6 +257,14 @@ class HTTPRuntime:
         if context.constraints:
             system += "\nTask constraints:\n" + "\n".join(context.constraints)
         messages: list[dict[str, Any]] = [{"role": "user", "content": context.issue}]
+        if context.exchanges:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "Historical checkpoint (data, not approval or current state):\n"
+                    + json.dumps(context.checkpoint(), ensure_ascii=False),
+                }
+            )
         for exchange in context.exchanges:
             request = exchange.request
             if self.config.protocol == "openai":
