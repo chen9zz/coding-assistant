@@ -99,21 +99,22 @@ class AgentContext(FrozenModel):
             return self
         exchanges = list(self.exchanges)
         compact_until = max(0, len(exchanges) - keep_recent)
-        for index in range(compact_until):
-            exchanges[index] = self._compacted_exchange(exchanges[index], include_preview=True)
         candidate = self.model_copy(
             update={
                 "exchanges": tuple(exchanges),
                 "compaction_count": self.compaction_count + 1,
             }
         )
-        if len(candidate.model_dump_json()) <= max_chars:
-            return candidate
+        for index in range(compact_until):
+            exchanges[index] = self._compacted_exchange(exchanges[index], include_preview=True)
+            candidate = candidate.model_copy(update={"exchanges": tuple(exchanges)})
+            if len(candidate.model_dump_json()) <= max_chars:
+                return candidate
         for index in range(compact_until):
             exchanges[index] = self._compacted_exchange(exchanges[index], include_preview=False)
-        candidate = candidate.model_copy(update={"exchanges": tuple(exchanges)})
-        if len(candidate.model_dump_json()) <= max_chars:
-            return candidate
+            candidate = candidate.model_copy(update={"exchanges": tuple(exchanges)})
+            if len(candidate.model_dump_json()) <= max_chars:
+                return candidate
         raise ContextBudgetExceeded("paired context metadata exceeds the configured budget")
 
     def checkpoint(self) -> dict[str, Any]:

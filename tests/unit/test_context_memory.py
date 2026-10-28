@@ -63,3 +63,14 @@ def test_full_payload_budget_counts_system_and_tools():
     runtime = HTTPRuntime(config, tools=[], instructions="rules" * 10000)
     with pytest.raises(ContextBudgetExceeded):
         runtime.prepare_context(AgentContext(issue="test"), 24000)
+
+
+def test_compaction_stops_after_enough_old_evidence_is_replaced():
+    context = AgentContext(exchanges=tuple(exchange(i) for i in range(5)))
+    compacted = context.compact(32000)
+    assert len(compacted.model_dump_json()) <= 32000
+    # Replacing only the oldest two is enough. Keep the third result available,
+    # rather than discarding all but two and encouraging unnecessary rereads.
+    assert [e.compacted for e in compacted.exchanges] == [True, True, False, False, False]
+    assert compacted.exchanges[2:] == context.exchanges[2:]
+    assert [e.request for e in compacted.exchanges] == [e.request for e in context.exchanges]

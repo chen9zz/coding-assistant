@@ -1,0 +1,79 @@
+{
+  "date": "2026-10-28",
+  "provider": "DeepSeek",
+  "model": "deepseek-flash",
+  "thinking": "disabled",
+  "storage": "mysql",
+  "target_baseline": "50d07d306c5431415771002b00228336c0c3a721",
+  "mode": "operator-guided functional validation, not a benchmark",
+  "status": "PASS",
+  "checks": {
+    "host_task_succeeded": true,
+    "budget_enforced": true,
+    "bounded_stress_compaction_observed": true,
+    "checkpoint_present": true,
+    "approved_memory_retrieved": true,
+    "changed_memory_excluded": true,
+    "rag_before_after_citations": true,
+    "rag_new_hash_matches_source": true,
+    "rag_old_hash_matches_baseline": true,
+    "historical_rag_evidence_read": true,
+    "historical_evidence_hash_valid": true,
+    "final_reports_original_memory_id": true,
+    "final_reports_before_after_citations": true,
+    "changed_paths_within_scope": true,
+    "acceptance_unchanged": true,
+    "independent_acceptance": true
+  },
+  "default_run": {
+    "budget_chars": 128000,
+    "model_calls": 27,
+    "max_payload_chars": 90148,
+    "compacted_requests": 0,
+    "approval_requests": 2,
+    "tool_failure_events": 2,
+    "external_checks_passed": 8,
+    "candidate_regressions": {
+      "passed": 397,
+      "skipped": 5
+    },
+    "citations": [
+      {
+        "citation": "src/repopilot/tools/rag_sources.py:123-161",
+        "sha256": "18bef6069d4d1773533bbc29762da24236b4eb0b5b27bec737a5b4ce590f1f49",
+        "updated_files": 102
+      },
+      {
+        "citation": "src/repopilot/tools/rag_sources.py:123-165",
+        "sha256": "037a1c2e098267b6e9c436f67845bb9fa0258a661b2f285690f7a6723511c9b2",
+        "updated_files": 1
+      }
+    ]
+  },
+  "stress_run_2": {
+    "budget_chars": 48000,
+    "model_calls": 24,
+    "max_payload_chars": 47768,
+    "compacted_requests": 16,
+    "code_verification": "passed",
+    "final_report": "incomplete"
+  },
+  "failed_attempts": [
+    {
+      "attempt": 1,
+      "model_calls": 13,
+      "reason": "ContextBudgetExceeded"
+    },
+    {
+      "attempt": 3,
+      "model_calls": 40,
+      "reason": "ContextBudgetExceeded"
+    }
+  ],
+  "limitations": [
+    "Manual source-backed memory seed and explicit task guidance",
+    "Two exact test-command approvals in the default run",
+    "Unsupported statements in final model prose were rejected against tool evidence",
+    "No causal performance gain or autonomous success-rate claim"
+  ]
+}
