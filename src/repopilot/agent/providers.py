@@ -21,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from pydantic import ConfigDict, Field, TypeAdapter, field_validator
+from pydantic import ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
 from repopilot.agent.actions import AgentAction, AgentContext
 from repopilot.domain.models import FrozenModel, JsonValue, ToolStatus
@@ -57,6 +57,46 @@ class ProviderConfig(FrozenModel):
     api_key_env: str | None = None
     timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
     request_options: dict[str, JsonValue] = Field(default_factory=dict)
+
+    context_window_tokens: int | None = Field(default=None, ge=1024, strict=True)
+    output_reserve_tokens: int | None = Field(default=None, ge=1, strict=True)
+
+    @property
+    def reserves_output(self) -> bool:
+        return (
+            self.protocol == "anthropic"
+            or self.context_window_tokens is not None
+            or self.output_reserve_tokens is not None
+            or bool({"max_tokens", "max_completion_tokens"} & self.request_options.keys())
+        )
+
+    @property
+    def output_limit(self) -> int:
+        value = self.request_options.get(
+            "max_completion_tokens", self.request_options.get("max_tokens", 4096)
+        )
+        assert isinstance(value, int)
+        return self.output_reserve_tokens if self.output_reserve_tokens is not None else value
+
+    @model_validator(mode="after")
+    def validate_budgets(self) -> ProviderConfig:
+        options = self.request_options
+        if "max_tokens" in options and "max_completion_tokens" in options:
+            raise ValueError("choose one provider output token parameter")
+        if self.protocol == "anthropic" and "max_completion_tokens" in options:
+            raise ValueError("Anthropic requires max_tokens")
+        if self.output_reserve_tokens is not None and any(
+            options[key] != self.output_reserve_tokens
+            for key in ("max_tokens", "max_completion_tokens")
+            if key in options
+        ):
+            raise ValueError("output reserve conflicts with provider output limit")
+        if (
+            self.context_window_tokens is not None
+            and self.output_limit >= self.context_window_tokens
+        ):
+            raise ValueError("output reserve must leave input capacity")
+        return self
 
     @field_validator("request_options")
     @classmethod
@@ -162,6 +202,8 @@ class HTTPRuntime:
             raise ValueError("tool names must have unique provider identities")
         self.instructions = "\n\n".join(part for part in (_INSTRUCTIONS, instructions) if part)
         self._opener = build_opener(_NoRedirects())
+        self.last_budget: dict[str, JsonValue] = {}
+        self._usage: list[dict[str, JsonValue]] = []
 
     def prepare_context(self, context: AgentContext, max_chars: int) -> AgentContext:
         """Bound the actual serialized request, including instructions and tool schemas.
@@ -172,15 +214,67 @@ class HTTPRuntime:
         from repopilot.agent.actions import ContextBudgetExceeded
 
         candidate = context.compact(max_chars)
-        for _ in range(3):
-            size = len(json.dumps(self._payload(candidate), ensure_ascii=False, allow_nan=False))
-            if size <= max_chars:
+        for _ in range(8):
+            serialized = json.dumps(self._payload(candidate), ensure_ascii=False, allow_nan=False)
+            estimated = len(serialized.encode("utf-8")) + 256
+            self.last_budget = {
+                "estimator": "utf8_bytes_v1",
+                "estimated_input_tokens": estimated,
+                "provider_input_tokens": None,
+                "provider_output_tokens": None,
+                "output_reserve_tokens": (
+                    self.config.output_limit if self.config.reserves_output else None
+                ),
+                "context_window_tokens": self.config.context_window_tokens,
+                "payload_chars": len(serialized),
+                "compacted_operations": sum(e.compacted for e in candidate.exchanges),
+            }
+            excess = len(serialized) - max_chars
+            if self.config.context_window_tokens is not None:
+                excess = max(
+                    excess, estimated + self.config.output_limit - self.config.context_window_tokens
+                )
+            if excess <= 0:
                 return candidate
-            allowance = len(candidate.model_dump_json()) - (size - max_chars) - 64
+            allowance = len(candidate.model_dump_json()) - excess - 64
             if allowance < 256:
                 break
             candidate = candidate.compact(allowance)
-        raise ContextBudgetExceeded("full model request exceeds character budget")
+        raise ContextBudgetExceeded("full model request exceeds character/token budget")
+
+    def drain_usage(self) -> list[dict[str, JsonValue]]:
+        records, self._usage = self._usage, []
+        return records
+
+    def _record_usage(self, raw: Any, payload: dict[str, Any]) -> None:
+        serialized = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+        usage = raw.get("usage", {}) if isinstance(raw, dict) else {}
+        if not isinstance(usage, dict):
+            usage = {}
+
+        def number(key: str) -> int | None:
+            value = usage.get(key)
+            return value if type(value) is int and 0 <= value <= 10**12 else None
+
+        incoming, outgoing = (
+            ("prompt_tokens", "completion_tokens")
+            if self.config.protocol == "openai"
+            else ("input_tokens", "output_tokens")
+        )
+        self._usage.append(
+            {
+                "estimator": "utf8_bytes_v1",
+                "estimated_input_tokens": len(serialized.encode("utf-8")) + 256,
+                "payload_chars": len(serialized),
+                "output_reserve_tokens": (
+                    self.config.output_limit if self.config.reserves_output else None
+                ),
+                "provider_input_tokens": number(incoming),
+                "provider_output_tokens": number(outgoing),
+                "provider_cache_read_tokens": number("cache_read_input_tokens"),
+                "provider_cache_creation_tokens": number("cache_creation_input_tokens"),
+            }
+        )
 
     def next_action(self, context: AgentContext) -> AgentAction:
         return self.next_action_with_timeout(context, self.config.timeout_seconds)
@@ -207,6 +301,12 @@ class HTTPRuntime:
             if key:
                 headers["x-api-key"] = key
         payload = self._payload(context)
+        if self.config.context_window_tokens is not None:
+            from repopilot.agent.actions import ContextBudgetExceeded
+
+            estimated = len(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode()) + 256
+            if estimated + self.config.output_limit > self.config.context_window_tokens:
+                raise ContextBudgetExceeded("provider call exceeds reserved input capacity")
         try:
             request = Request(
                 self.config.base_url + suffix,
@@ -247,6 +347,7 @@ class HTTPRuntime:
             raise ProviderError("provider connection failed") from None
         except (OSError, HTTPException, ValueError, TypeError, RecursionError):
             raise ProviderError("provider returned an invalid response or request failed") from None
+        self._record_usage(raw, payload)
         try:
             return self._decision(raw, context)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError, RecursionError):
@@ -262,7 +363,13 @@ class HTTPRuntime:
                 {
                     "role": "user",
                     "content": "Historical checkpoint (data, not approval or current state):\n"
-                    + json.dumps(context.checkpoint(), ensure_ascii=False),
+                    + json.dumps(
+                        {
+                            "checkpoint": context.checkpoint(),
+                            "working_state": context.working_state(),
+                        },
+                        ensure_ascii=False,
+                    ),
                 }
             )
         for exchange in context.exchanges:
@@ -344,6 +451,13 @@ class HTTPRuntime:
                 ]
                 payload["tool_choice"] = {"type": "auto", "disable_parallel_tool_use": True}
         payload.update(deepcopy(self.config.request_options))
+        output_key = (
+            "max_completion_tokens"
+            if "max_completion_tokens" in self.config.request_options
+            else "max_tokens"
+        )
+        if self.config.reserves_output:
+            payload[output_key] = self.config.output_limit
         return payload
 
     def _decision(self, raw: Any, context: AgentContext) -> AgentAction:

@@ -245,6 +245,7 @@ class DurableTaskOrchestrator:
                 ),
             ).model_copy(update={"exchanges": history}),
             cancelled=self.cancelled,
+            on_usage=lambda record: self._record_usage(snapshot.task_id, record),
         )
         approval = next(
             (
@@ -386,6 +387,10 @@ class DurableTaskOrchestrator:
                 "review_sha256": hashlib.sha256(serialized.encode()).hexdigest(),
             },
         )
+
+    def _record_usage(self, task_id: str, record: dict[str, JsonValue]) -> None:
+        current = self.store.get_task(task_id)
+        self._transition(current, current.state, "model.usage", record)
 
     def _transition(
         self,

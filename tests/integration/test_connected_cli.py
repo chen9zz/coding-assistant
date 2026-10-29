@@ -81,9 +81,10 @@ def test_online_cli_uses_skill_native_tools_and_produces_verified_patch(
                 )
             body = json.dumps(
                 {
+                    "usage": {"prompt_tokens": 100, "completion_tokens": 20},
                     "choices": [
                         {"message": message, "finish_reason": "tool_calls" if name else "stop"}
-                    ]
+                    ],
                 }
             ).encode()
             self.send_response(200)
@@ -191,6 +192,15 @@ def test_online_cli_uses_skill_native_tools_and_produces_verified_patch(
         ],
     )
     assert ("rag_search" if mode == "rag" else "skill_read") in artifacts.stdout
+    usage = [
+        e["payload"]
+        for e in json.loads(artifacts.stdout)["events"]
+        if e["event_type"] == "model.usage"
+    ]
+    assert len(usage) == len(requests)
+    assert sum(row["provider_input_tokens"] for row in usage) == 100 * len(requests)
+    assert sum(row["provider_output_tokens"] for row in usage) == 20 * len(requests)
+    assert all(row["estimated_input_tokens"] > 0 for row in usage)
     if mode == "mcp":
         assert "coding context" in json.dumps(requests[-1])
         mcp_tools = [t for t in catalog if t.startswith("mcp__")]

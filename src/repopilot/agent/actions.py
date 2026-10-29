@@ -115,7 +115,27 @@ class AgentContext(FrozenModel):
             candidate = candidate.model_copy(update={"exchanges": tuple(exchanges)})
             if len(candidate.model_dump_json()) <= max_chars:
                 return candidate
+        # Read receipts are an optimization, not mandatory transcript metadata.
+        # Under very small budgets keep the original digest/identity and recover
+        # details through context_read rather than exceeding the hard limit.
+        for index in range(compact_until):
+            exchange = exchanges[index]
+            if exchange.request.name != "read_file" or not isinstance(exchange.result.output, dict):
+                continue
+            output = dict(exchange.result.output)
+            output.pop("facts", None)
+            exchanges[index] = exchange.model_copy(
+                update={"result": exchange.result.model_copy(update={"output": output})}
+            )
+            candidate = candidate.model_copy(update={"exchanges": tuple(exchanges)})
+            if len(candidate.model_dump_json()) <= max_chars:
+                return candidate
         raise ContextBudgetExceeded("paired context metadata exceeds the configured budget")
+
+    def working_state(self) -> dict[str, Any]:
+        from repopilot.agent.working_state import working_state
+
+        return working_state(self.exchanges)
 
     def checkpoint(self) -> dict[str, Any]:
         """Bounded host facts reconstructed from durable history, never model assertions."""
@@ -162,6 +182,11 @@ class AgentContext(FrozenModel):
             "compacted": True,
             "original_sha256": hashlib.sha256(serialized.encode()).hexdigest(),
         }
+        from repopilot.agent.working_state import facts
+
+        retained = facts(exchange)
+        if retained:
+            summary["facts"] = retained
         if include_preview:
             summary["preview"] = serialized[:120]
         result = exchange.result.model_copy(update={"output": summary, "truncated": True})

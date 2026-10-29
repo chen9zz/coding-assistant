@@ -15,7 +15,7 @@ from repopilot.agent.actions import (
     FinalAnswer,
     ToolExchange,
 )
-from repopilot.domain.models import ToolRequest, ToolResult, ToolStatus
+from repopilot.domain.models import JsonValue, ToolRequest, ToolResult, ToolStatus
 
 
 class Runtime(Protocol):
@@ -25,6 +25,11 @@ class Runtime(Protocol):
 @runtime_checkable
 class ContextRuntime(Protocol):
     def prepare_context(self, context: AgentContext, max_chars: int) -> AgentContext: ...
+
+
+@runtime_checkable
+class UsageRuntime(Protocol):
+    def drain_usage(self) -> list[dict[str, JsonValue]]: ...
 
 
 @runtime_checkable
@@ -105,6 +110,7 @@ class MinimalAgentLoop:
         context: AgentContext,
         *,
         cancelled: Callable[[], bool] | None = None,
+        on_usage: Callable[[dict[str, JsonValue]], None] | None = None,
     ) -> FinalAnswer:
         started = time.monotonic()
 
@@ -142,11 +148,16 @@ class MinimalAgentLoop:
                 if isinstance(runtime, ContextRuntime)
                 else context.compact(self.max_context_chars)
             )
-            action = (
-                runtime.next_action_with_timeout(context, remaining_time())
-                if isinstance(runtime, DeadlineRuntime)
-                else runtime.next_action(context)
-            )
+            try:
+                action = (
+                    runtime.next_action_with_timeout(context, remaining_time())
+                    if isinstance(runtime, DeadlineRuntime)
+                    else runtime.next_action(context)
+                )
+            finally:
+                if on_usage is not None and isinstance(runtime, UsageRuntime):
+                    for record in runtime.drain_usage():
+                        on_usage(record)
             remaining = remaining_time()
             if cancelled and cancelled():
                 raise AgentCancelled("task cancelled after model response")

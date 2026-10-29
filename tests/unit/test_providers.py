@@ -544,3 +544,28 @@ def test_each_body_read_uses_remaining_time_budget() -> None:
         with pytest.raises(providers.ProviderError, match="timed out"):
             runtime.next_action_with_timeout(AgentContext.empty("fix"), 0.25)
         assert time.monotonic() - started < 0.35
+
+
+@pytest.mark.parametrize("protocol", ["openai", "anthropic"])
+def test_provider_usage_is_numeric_only_and_output_is_reserved(protocol):
+    body = response(protocol)
+    body["usage"] = (
+        {"prompt_tokens": 120, "completion_tokens": 30, "secret": "never retain"}
+        if protocol == "openai"
+        else {"input_tokens": 120, "output_tokens": 30, "cache_read_input_tokens": 10}
+    )
+    with serving([{"body": body}]) as (url, server):
+        providers = provider_module()
+        runtime = providers.HTTPRuntime(
+            providers.ProviderConfig(
+                protocol=protocol, base_url=url, model="test", output_reserve_tokens=1000
+            ),
+            [],
+        )
+        runtime.next_action(AgentContext(issue="test"))
+        records = runtime.drain_usage()
+        assert records[0]["provider_input_tokens"] == 120
+        assert records[0]["provider_output_tokens"] == 30
+        assert "never retain" not in json.dumps(records)
+        assert server.requests[0]["body"]["max_tokens"] == 1000
+        assert runtime.drain_usage() == []

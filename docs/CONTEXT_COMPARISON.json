@@ -1,0 +1,62 @@
+{
+  "kind": "deterministic representation ablation",
+  "model_calls": 0,
+  "budget_chars": 30000,
+  "cases": [
+    {
+      "case": 0,
+      "baseline_retained_fields": 0,
+      "enhanced_retained_fields": 3,
+      "required_fields": 3,
+      "baseline_scripted_recovery_requests": 3,
+      "enhanced_scripted_recovery_requests": 0,
+      "enhanced_context_chars": 27782
+    },
+    {
+      "case": 1,
+      "baseline_retained_fields": 0,
+      "enhanced_retained_fields": 3,
+      "required_fields": 3,
+      "baseline_scripted_recovery_requests": 3,
+      "enhanced_scripted_recovery_requests": 0,
+      "enhanced_context_chars": 28262
+    },
+    {
+      "case": 2,
+      "baseline_retained_fields": 0,
+      "enhanced_retained_fields": 3,
+      "required_fields": 3,
+      "baseline_scripted_recovery_requests": 3,
+      "enhanced_scripted_recovery_requests": 0,
+      "enhanced_context_chars": 28742
+    },
+    {
+      "case": 3,
+      "baseline_retained_fields": 0,
+      "enhanced_retained_fields": 3,
+      "required_fields": 3,
+      "baseline_scripted_recovery_requests": 3,
+      "enhanced_scripted_recovery_requests": 0,
+      "enhanced_context_chars": 29222
+    },
+    {
+      "case": 4,
+      "baseline_retained_fields": 0,
+      "enhanced_retained_fields": 3,
+      "required_fields": 3,
+      "baseline_scripted_recovery_requests": 3,
+      "enhanced_scripted_recovery_requests": 0,
+      "enhanced_context_chars": 29702
+    },
+    {
+      "case": 5,
+      "baseline_retained_fields": 0,
+      "enhanced_retained_fields": 3,
+      "required_fields": 3,
+      "baseline_scripted_recovery_requests": 3,
+      "enhanced_scripted_recovery_requests": 0,
+      "enhanced_context_chars": 25019
+    }
+  ],
+  "limitations": "Recovery counts follow a fixed missing-field policy, not observed LLM behavior. Baseline removes retained facts from the same compacted history; this is not an exact replay of the prior HTTP harness."
+}
